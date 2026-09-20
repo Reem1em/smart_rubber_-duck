@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <defs>
+    <!-- Duck Body Gradient -->
+    <linearGradient id="duckBodyGrad" x1="40" y1="50" x2="160" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFE042" />
+      <stop offset="55%" stop-color="#FFCA18" />
+      <stop offset="100%" stop-color="#F5B300" />
+    </linearGradient>
+
+    <!-- Beak Gradient -->
+    <linearGradient id="beakGrad" x1="140" y1="65" x2="190" y2="85" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF8A24" />
+      <stop offset="100%" stop-color="#EB5405" />
+    </linearGradient>
+
+    <!-- Head Highlight -->
+    <linearGradient id="headHighlight" x1="105" y1="35" x2="135" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.65" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+
+  <!-- Duck Body Shadow / Base -->
+  <path
+    d="M45 130 C45 98 72 82 105 82 C120 82 135 88 145 96 C165 78 185 88 182 110 C180 135 160 162 125 166 C80 172 45 158 45 130 Z"
+    fill="url(#duckBodyGrad)"
+  />
+
+  <!-- Tail Curve -->
+  <path
+    d="M48 132 C30 120 22 102 32 94 C44 86 58 108 58 122 Z"
+    fill="#F5B300"
+  />
+
+  <!-- Body Bottom Shadow Outline -->
+  <path
+    d="M50 136 C68 162 105 168 140 160 C162 154 175 138 178 120 C173 145 145 164 115 164 C80 164 58 150 50 136 Z"
+    fill="#D98200"
+    opacity="0.3"
+  />
+
+  <!-- Cute Wing -->
+  <path
+    d="M78 116 C78 106 102 102 122 110 C130 114 128 132 112 135 C98 138 88 134 82 128 C79 125 78 120 78 116 Z"
+    fill="#F5A800"
+    stroke="#D97706"
+    stroke-width="2.5"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M96 122 C104 126 112 125 118 120"
+    stroke="#D97706"
+    stroke-width="2"
+    stroke-linecap="round"
+  />
+
+  <!-- Big Round Duck Head -->
+  <circle
+    cx="132"
+    cy="68"
+    r="38"
+    fill="url(#duckBodyGrad)"
+  />
+
+  <!-- Head Top Highlight Gleam -->
+  <ellipse
+    cx="120"
+    cy="46"
+    rx="12"
+    ry="6"
+    transform="rotate(-28 120 46)"
+    fill="url(#headHighlight)"
+  />
+
+  <!-- Orange Plump Beak (Pointing Right) -->
+  <path
+    d="M152 64 C168 62 186 67 190 73 C192 77 186 83 176 85 C164 87 150 82 148 74 Z"
+    fill="url(#beakGrad)"
+    stroke="#C2410C"
+    stroke-width="1.8"
+    stroke-linejoin="round"
+  />
+  <!-- Beak Smile Crease -->
+  <path
+    d="M150 72 C158 74 168 75 174 74"
+    stroke="#B43403"
+    stroke-width="1.5"
+    stroke-linecap="round"
+    opacity="0.7"
+  />
+
+  <!-- Eye: Glossy Dark Oval with Specular Reflections -->
+  <circle
+    cx="145"
+    cy="58"
+    r="8"
+    fill="#1E1B2E"
+  />
+  <!-- Primary Eye Highlight -->
+  <circle
+    cx="147.5"
+    cy="55.5"
+    r="3.2"
+    fill="#FFFFFF"
+  />
+  <!-- Secondary Subtle Eye Reflection -->
+  <circle
+    cx="143"
+    cy="60.5"
+    r="1.4"
+    fill="#FFFFFF"
+  />
+
+  <!-- Soft Peach Blush Cheek -->
+  <ellipse
+    cx="128"
+    cy="72"
+    rx="7.5"
+    ry="5"
+    fill="#FFA07A"
+    opacity="0.65"
+  />
+
+  <!-- Body Gleam Highlight -->
+  <path
+    d="M62 144 C72 154 94 158 114 156"
+    stroke="#FFFFFF"
+    stroke-width="2.5"
+    stroke-linecap="round"
+    opacity="0.45"
+  />
+</svg>

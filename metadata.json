@@ -1,0 +1,6 @@
+{
+  "name": "كواكلي - مدرب الرياضيات الذكي",
+  "description": "منصة كواكلي (Quakly): اشرح بصوتك • اكتشف ثغراتك • اختبر فهمك في كافة مقررات الرياضيات (جبر، تفاضل، تكامل، متجهات).",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
