@@ -1,22 +1,26 @@
 import React from 'react';
 import { AppStateProvider, useAppState } from './context/AppStateContext';
+import { AuthProvider } from './context/AuthContext';
+import { AccountMenu } from './components/AccountMenu';
 import { UploadPanel } from './components/UploadPanel';
+import { MyCoursesPanel } from './components/MyCoursesPanel';
 import { ConceptsPanel } from './components/ConceptsPanel';
 import { TeachDuckPanel } from './components/TeachDuckPanel';
 import { SocraticQuestionPanel } from './components/SocraticQuestionPanel';
 import { TransferChallengePanel } from './components/TransferChallengePanel';
 import { QuizPanel } from './components/QuizPanel';
 import { FinalDiagnosisPanel } from './components/FinalDiagnosisPanel';
-import { TermPlannerPanel } from './components/TermPlannerPanel';
-import { ProjectLabPanel } from './components/ProjectLabPanel';
-import { BugLabPanel } from './components/BugLabPanel';
+import { CourseRoadmapPanel } from './components/CourseRoadmapPanel';
+import { CodeLabPanel } from './components/CodeLabPanel';
 import { RateLimitModal } from './components/RateLimitModal';
+import { CourseChatDrawer } from './components/CourseChatDrawer';
 import { ThemeToggleCornerButton } from './components/ThemeToggleCornerButton';
 import {
   RotateCcw,
-  Calendar,
+  Map as MapIcon,
+  MessageCircle,
   Code2,
-  Bug,
+  Library,
   Sun,
   Moon,
 } from 'lucide-react';
@@ -25,11 +29,14 @@ function AppContent() {
   const {
     step,
     setStep,
+    courses,
     theme,
     toggleTheme,
     resetAll,
     rateLimitModalOpen,
     closeRateLimitModal,
+    activeCourse,
+    openCourseChat,
   } = useAppState();
 
   const getStepNumber = (s: string) => {
@@ -62,6 +69,8 @@ function AppContent() {
       className="min-h-screen bg-gradient-to-b from-amber-50/60 via-slate-50 to-amber-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-amber-200 dark:selection:bg-amber-800 selection:text-amber-900 dark:selection:text-amber-100 flex flex-col justify-between transition-colors duration-200 font-arabic"
     >
       <RateLimitModal isOpen={rateLimitModalOpen} onClose={closeRateLimitModal} />
+
+      <CourseChatDrawer />
 
       {/* Floating Corner Theme Toggle Button */}
       <ThemeToggleCornerButton />
@@ -96,39 +105,55 @@ function AppContent() {
           {/* Action Tools (Far Left in RTL) */}
           <div className="flex items-center gap-2 shrink-0 ms-auto">
             <button
-              onClick={() => setStep('planner')}
+              onClick={() => setStep('courses')}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                step === 'planner'
+                step === 'courses'
                   ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
                   : 'bg-amber-50 dark:bg-slate-800 text-amber-900 dark:text-amber-300 border-amber-200 dark:border-slate-700 hover:bg-amber-100 dark:hover:bg-slate-750'
               }`}
             >
-              <Calendar className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">خطة الانضباط الدراسي</span>
+              <Library className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">موادي</span>
+              {courses.length > 0 && (
+                <span className="px-1.5 rounded-full bg-amber-200 text-amber-950 text-[10px] font-black">
+                  {courses.length}
+                </span>
+              )}
             </button>
 
             <button
-              onClick={() => setStep('projectLab')}
+              onClick={() => setStep('roadmap')}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                step === 'projectLab'
+                step === 'roadmap'
+                  ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                  : 'bg-amber-50 dark:bg-slate-800 text-amber-900 dark:text-amber-300 border-amber-200 dark:border-slate-700 hover:bg-amber-100 dark:hover:bg-slate-750'
+              }`}
+            >
+              <MapIcon className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">خريطة المقرر</span>
+            </button>
+
+            {activeCourse && (
+              <button
+                onClick={() => openCourseChat()}
+                title={`اسأل كواكلي عن مادة ${activeCourse.title}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer bg-amber-50 dark:bg-slate-800 text-amber-900 dark:text-amber-300 border-amber-200 dark:border-slate-700 hover:bg-amber-100 dark:hover:bg-slate-750"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">اسأل كواكلي</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => setStep('codeLab')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                step === 'codeLab'
                   ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
                   : 'bg-amber-50 dark:bg-slate-800 text-amber-900 dark:text-amber-300 border-amber-200 dark:border-slate-700 hover:bg-amber-100 dark:hover:bg-slate-750'
               }`}
             >
               <Code2 className="w-3.5 h-3.5" />
               <span className="hidden md:inline">معمل البرمجة</span>
-            </button>
-
-            <button
-              onClick={() => setStep('bugLab')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                step === 'bugLab'
-                  ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
-                  : 'bg-amber-50 dark:bg-slate-800 text-amber-900 dark:text-amber-300 border-amber-200 dark:border-slate-700 hover:bg-amber-100 dark:hover:bg-slate-750'
-              }`}
-            >
-              <Bug className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">صياد الثغرات</span>
             </button>
 
             {/* Corner / Header Day & Night Switcher */}
@@ -154,6 +179,8 @@ function AppContent() {
                 </>
               )}
             </button>
+
+            <AccountMenu />
 
             {step !== 'upload' && (
               <button
@@ -265,15 +292,15 @@ function AppContent() {
       {/* Main Learning Flow Panel Stage */}
       <main className="flex-1 py-6">
         {step === 'upload' && <UploadPanel />}
+        {step === 'courses' && <MyCoursesPanel />}
         {step === 'concepts' && <ConceptsPanel />}
         {step === 'teach' && <TeachDuckPanel />}
         {(step === 'diagnosis' || step === 'socratic') && <SocraticQuestionPanel />}
         {step === 'transfer' && <TransferChallengePanel />}
         {step === 'quiz' && <QuizPanel />}
         {step === 'final' && <FinalDiagnosisPanel />}
-        {step === 'planner' && <TermPlannerPanel />}
-        {step === 'projectLab' && <ProjectLabPanel />}
-        {step === 'bugLab' && <BugLabPanel />}
+        {step === 'roadmap' && <CourseRoadmapPanel />}
+        {step === 'codeLab' && <CodeLabPanel />}
       </main>
 
       {/* Footer */}
@@ -288,8 +315,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AppStateProvider>
-      <AppContent />
-    </AppStateProvider>
+    <AuthProvider>
+      <AppStateProvider>
+        <AppContent />
+      </AppStateProvider>
+    </AuthProvider>
   );
 }

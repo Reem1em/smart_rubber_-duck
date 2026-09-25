@@ -23,6 +23,7 @@ export async function evaluateBugChallenge(data: {
   buggyCode: string;
   userFixDescription: string;
   expectedBehavior: string;
+  language?: string;
 }): Promise<BugEvaluationResponse> {
   const response = await fetchWithTimeout('/evaluate-bug-challenge', {
     method: 'POST',

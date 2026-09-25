@@ -1,36 +1,24 @@
+import { MATH_ENGINE_DIRECTIVES } from '../stem';
+
 /** Math bug-hunting challenge for math topics, code bug-hunting otherwise. */
 export function buildBugChallengePrompt({ isMath, lang, diff }: { isMath: boolean; lang: string; diff: string }): string {
   const prompt = isMath
-        ? `أنت "كواكلي" (Quakly)، خبير الرياضيات والمدرب التفاعلي في نمط (صيد الخطأ الحسابي - Math Bug-Hunting).
-المطلوب توليد تحدي رياضي لصيد خطأ حسابي في مجال: "${lang}" بمستوى: "${diff}".
+        ? `أنت "كواكلي" (Quakly)، محرك الرياضيات (Math Engine) والمدرب التفاعلي في نمط (صيد الخطأ الحسابي - Math Bug-Hunting).
+ولّد تحدياً رياضياً عددياً واحداً في مجال: "${lang}" بمستوى: "${diff}".
 
-قاعدة صارمة لعزل الصيغ والأسطر (Zero In-line Math Rule):
-1. يُمنع منعاً باتاً دمج المصفوفات أو المعادلات الطويلة داخل الأسطر النصية باللغة العربية (تجنب قلب الحروف والأرقام RTL/LTR).
-2. أي مصفوفة أو عملية حسابية يجب أن تُكتب في سطر مستقل كلياً مع ترك سطر فارغ قبلها وبعدها.
-3. التنسيق الإلزامي للمصفوفات (عرض ثنائي الأبعاد):
-   - افصل كل مصفوفة برسم مستقل:
-     المصفوفة A =
-     [ 1   2 ]
+${MATH_ENGINE_DIRECTIVES}
 
-     المصفوفة B =
-     [ 5   9 ]
-
-4. عند كتابة خطوات الحل الخاطئة للزميل، اكتب كل خطوة على سطر منفصل وبفراغات واسعة:
-   خطوة الزميل:
-   (1 × 5) + (2 × 9)
-
-5. الرموز الرياضية الحقيقية: x² ، x³ ، f⁻¹(x) ، A⁻¹ ، ∫ ، dy/dx.
-6. التحدي في نهاية buggyCode: "وين الغلطة الحسابية أو المنطقية في حله؟ اشرح لي بصوتك إيش الخطوة الصح."
+إلزامي في هذا المسار: استخدم النمط A (صيد الخطأ الحسابي) حصراً، وبخطأ واحد فقط (totalBugsCount = 1).
 
 JSON Schema:
 {
   "type": "debugging_challenge",
   "challenge": {
-    "title": "صيد الخطأ الحسابي: ضرب المصفوفات",
+    "title": "صيد الخطأ الحسابي: محدد مصفوفة 2×2",
     "language": "${lang}",
     "difficulty": "${diff}",
-    "expectedBehavior": "المطلوب شرح ضرب الصف في العمود والخطوة الحسابية الصحيحة.",
-    "buggyCode": "السؤال:\\nلدينا المصفوفتان:\\nالمصفوفة A =\\n[ 1   2 ]\\n\\nالمصفوفة B =\\n[ 5   9 ]\\n\\nإذا قام الزميل بحساب ضرب A × B كالتالي:\\n[ (1 × 5) + (2 × ?) ]\\n\\nوين الغلطة الحسابية أو المنطقية في حله؟ اشرح لي بصوتك إيش الخطوة الصح.",
+    "expectedBehavior": "المطلوب حساب محدد المصفوفة بطرح حاصل ضرب القطر الثانوي من حاصل ضرب القطر الرئيسي.",
+    "buggyCode": "المصفوفة A:\\n\\n$$A = \\\\begin{bmatrix} 1 & 4 \\\\\\\\ 2 & 3 \\\\end{bmatrix}$$\\n\\nخطوة كواكلي:\\n\\n$$\\\\det(A) = (1 \\\\times 3) + (4 \\\\times 2) = 11$$\\n\\nوين الغلطة في خطوتي؟ اشرح لي بصوتك إيش الخطوة الصح وليه.",
     "totalBugsCount": 1
   }
 }`
@@ -57,10 +45,11 @@ Return raw JSON strictly matching this schema:
 }
 
 /** Grades the description of the bugs the student claims to have found. */
-export function buildBugEvaluationPrompt({ buggyCode, userFixDescription, expectedBehavior }: {
+export function buildBugEvaluationPrompt({ buggyCode, userFixDescription, expectedBehavior, isMath }: {
   buggyCode?: string;
   userFixDescription?: string;
   expectedBehavior?: string;
+  isMath?: boolean;
 }): string {
   const prompt = `أنت "كواكلي" (Quakly)، مراجع الأخطاء الحسابية والبرمجية.
 المسألة أو الكود الذي به أخطاء:
@@ -75,7 +64,11 @@ ${userFixDescription}
 المهمة:
 قيّم بدقة هل اكتشف الطالب الخطأ الحسابي أو المنطقي بشكل صحيح.
 قدم تقييماً مشجعاً ومباشراً باللغة العربية الفصحى بدون مقدمات طويلة.
+${isMath ? `
+${MATH_ENGINE_DIRECTIVES}
 
+حقل correctedCode يجب أن يعرض الحل الصحيح في كتل $$ ... $$ معزولة بدون أي رسم نصي للمصفوفات.
+` : ''}
 JSON Schema:
 {
   "score": 85,

@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 
 import { generateWithFallback } from '../gemini';
+import { handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildCodeLabPrompt } from '../prompts/codeLab';
 import { codeLabSchema } from '../schemas/codeLab';
@@ -28,7 +29,6 @@ export const handleGenerateCodeLab = async (req: Request, res: Response) => {
     }
     throw new Error('Invalid code lab response structure');
   } catch (err: any) {
-    console.warn('Fallback triggered for generate-code-lab:', err?.message || err);
-    return res.json(codeLabFallback());
+    return handleModelFailure(res, 'code-lab', err, () => codeLabFallback());
   }
 };

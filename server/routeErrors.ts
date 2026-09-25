@@ -1,0 +1,46 @@
+import type { Response } from 'express';
+
+import { isQuotaOrRateLimitError } from './gemini';
+
+/** Pulls the transport status off a Gemini SDK error, however it was wrapped. */
+function statusOf(err: any): number | undefined {
+  return err?.status ?? err?.statusCode ?? err?.response?.status;
+}
+
+/** Full error text, so the console shows the real API failure rather than a summary. */
+function detailOf(err: any): string {
+  if (!err) return 'unknown error';
+  if (typeof err === 'string') return err;
+  return err.message || err.error?.message || JSON.stringify(err).slice(0, 800);
+}
+
+/**
+ * Single exit point for a failed model call.
+ *
+ * Quota and rate-limit failures are propagated as a real 429 so the client's
+ * RateLimitModal fires — masking them behind a cheerful offline payload told the
+ * student the tutor was "unavailable" when they had simply run out of quota.
+ * Everything else still degrades to the route's fallback, but is logged in full.
+ */
+export function handleModelFailure(
+  res: Response,
+  context: string,
+  err: any,
+  fallback: () => unknown
+) {
+  const status = statusOf(err);
+  const detail = detailOf(err);
+
+  if (isQuotaOrRateLimitError(err)) {
+    console.error(`[${context}] Gemini quota / rate limit (HTTP ${status ?? 429}): ${detail}`);
+    return res.status(429).json({
+      error:
+        'تم استهلاك حصة الاستخدام المتاحة من نموذج Gemini. انتظر حتى تتجدد الحصة أو فعّل الفوترة في مشروعك.',
+      isRateLimit: true,
+      detail,
+    });
+  }
+
+  console.error(`[${context}] model call failed (HTTP ${status ?? 'n/a'}): ${detail}`);
+  return res.json(fallback());
+}

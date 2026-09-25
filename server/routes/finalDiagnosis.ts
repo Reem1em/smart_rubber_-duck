@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 
 import { generateWithFallback } from '../gemini';
+import { handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildFinalDiagnosisPrompt } from '../prompts/finalDiagnosis';
 import { finalDiagnosisSchema } from '../schemas/finalDiagnosis';
@@ -41,7 +42,6 @@ export const handleFinalDiagnosis = async (req: Request, res: Response) => {
     }
     throw new Error('Invalid final diagnosis response structure');
   } catch (err: any) {
-    console.warn('Fallback triggered for final-diagnosis:', err?.message || err);
-    return res.json(finalDiagnosisFallback(req.body));
+    return handleModelFailure(res, 'final-diagnosis', err, () => finalDiagnosisFallback(req.body));
   }
 };

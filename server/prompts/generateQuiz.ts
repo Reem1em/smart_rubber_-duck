@@ -1,11 +1,14 @@
+import { LATEX_DISPLAY_RULES, BAN_THEORY_RULE } from '../stem';
+
 /** Builds the graded 5-7 question quiz prompt for a single concept. */
-export function buildQuizPrompt({ conceptName, conceptSummary, principlesText, materialContext, studentExplanation, transferAnswer }: {
+export function buildQuizPrompt({ conceptName, conceptSummary, principlesText, materialContext, studentExplanation, transferAnswer, isStem }: {
   conceptName: string;
   conceptSummary: string;
   principlesText: string;
   materialContext?: string;
   studentExplanation?: string;
   transferAnswer?: string;
+  isStem?: boolean;
 }): string {
   const prompt = `أنت أستاذ أكاديمي خبير ومصمم اختبارات تقييمية تخصصية في منصة كواكلي للرياضيات.
 المادة التعليمية والمفهوم المستهدف:
@@ -15,17 +18,15 @@ export function buildQuizPrompt({ conceptName, conceptSummary, principlesText, m
 - سياق من محتوى المادة الدراسية: "${(materialContext || '').slice(0, 3000)}"
 - توضيحات وشرح الطالب للمفهوم: "${(studentExplanation || '') + ' ' + (transferAnswer || '')}"
 
-قاعدة ذهبية صارمة للتنسيق الرياضي (Strict Mathematical Formatting):
-يُحظر تماماً كتابة أي معادلة أو مصفوفة كرموز كودية (مثل [[a, b], [c, d]] أو (a)/(b)).
-1. المصفوفات في الأسئلة أو الخيارات تُعرض داخل خطوط عمودية واضحة على أسطر مستقلة:
-   | 1   4 |
-   | 2   3 |
-2. الكسور بخط أفقي:
-   3x + 1
-   ──────
-   x - 2
-3. الرموز الرياضية الحقيقية حصراً: x² ، x³ ، f⁻¹(x) ، A⁻¹ ، ∫ (2x + 1) dx ، dy/dx.
+${isStem ? `تم تفعيل محرك الرياضيات (MATH ENGINE ACTIVATED) لهذا المقرر.
 
+${LATEX_DISPLAY_RULES}
+
+${BAN_THEORY_RULE}
+
+إلزامي: كل سؤال في هذا الاختبار مسألة عددية محسوسة لها ناتج رقمي أو تعبير جبري صريح، والخيارات الأربعة قيم عددية/جبرية متقاربة وليست عبارات وصفية.
+` : `أي صيغة أو رمز كمي يُعرض في كتلة معزولة $$ ... $$ محاطة بسطر فارغ قبلها وبعدها لتفادي تضارب RTL/LTR.
+`}
 الهدف والمطلوب بدقة:
 قم بإنشاء اختبار قصير تقييمي يتكون من 5 إلى 7 أسئلة بصيغة اختيار من متعدد (4 خيارات لكل سؤال) باللغة العربية الفصحى البليغة.
 
@@ -33,7 +34,7 @@ export function buildQuizPrompt({ conceptName, conceptSummary, principlesText, m
 1. يجب أن تكون جميع الأسئلة والخيارات والتعليلات مرتبطة 100% وحصراً وبشكل مباشر بالمحتوى العلمي والأكاديمي للمادة وللمفهوم الدراسي المحدد ("${conceptName}") وتطبيقاته وقوانينه ومبادئه.
 2. يمنع منعاً باتاً صياغة أسئلة فوقية عن "البطة المطاطية" أو "فجوة اليقين" أو "أساليب التعلم الذاتي". يجب أن تختبر الأسئلة محتوى المادة التخصصية فقط.
 3. تدرّج في مستوى صعوبة الأسئلة بدقة من السهل إلى الصعب:
-- الأسئلة 1-2: مستوى "بسيط" (اختبار الاستيعاب الأساسي والتعاريف والمفاهيم الجوهرية في المادة)
+- الأسئلة 1-2: مستوى "بسيط" ${isStem ? '(حساب مباشر بخطوة واحدة على أرقام معطاة — ممنوع أي سؤال تعريفي)' : '(اختبار الاستيعاب الأساسي والمفاهيم الجوهرية في المادة)'}
 - الأسئلة 3-4: مستوى "متوسط" (اختبار الفهم وتطبيق المبادئ والمقارنة في سياق المادة)
 - الأسئلة 5-7: مستوى "متقدم" (اختبار التحليل، الحالات الخاصة، حل المشكلات واستنتاج النتائج)
 

@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { useAppState } from '../context/AppStateContext';
 import { analyzeMaterial } from '../services/ai';
 import { formatBytes } from '../utils/formatBytes';
+import { hashFile, hashContent, getCourse } from '../services/courseStore';
 import { isRateLimitError } from '../utils/rateLimit';
 import { DuckCharacter } from './DuckCharacter';
 import {
@@ -14,6 +15,8 @@ import {
   ArrowRight,
   ArrowLeft,
   BookOpen,
+  Zap,
+  Library,
 } from 'lucide-react';
 
 export const UploadPanel: React.FC = () => {
@@ -28,16 +31,35 @@ export const UploadPanel: React.FC = () => {
     setError,
     material,
     showRateLimitModal,
+    courses,
+    openCourse,
+    saveCourse,
   } = useAppState();
 
   const [activeTab, setActiveTab] = useState<'file' | 'text'>('file');
   const [pastedText, setPastedText] = useState('');
   const [isDragging, setIsDragging] = useState(false);
+  const [materialHash, setMaterialHash] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (file: File) => {
+  const handleFileSelect = async (file: File) => {
     if (!file) return;
     setError(null);
+    setMaterialHash(null);
+
+    // Local-first: an identical document already in the workspace reopens instantly,
+    // with zero AI calls and zero tokens spent.
+    try {
+      const fileHash = await hashFile(file);
+      const cached = await getCourse(fileHash);
+      if (cached) {
+        openCourse(cached);
+        return;
+      }
+      setMaterialHash(fileHash);
+    } catch (err) {
+      console.warn('تعذر حساب بصمة الملف:', err);
+    }
 
     if (file.size === 0) {
       setError('الملف المرفق فارغ (0 بايت). يرجى اختيار ملف يحتوي على مادة دراسية.');
@@ -112,7 +134,7 @@ export const UploadPanel: React.FC = () => {
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFileSelect(e.dataTransfer.files[0]);
+      void handleFileSelect(e.dataTransfer.files[0]);
     }
   };
 
@@ -120,6 +142,7 @@ export const UploadPanel: React.FC = () => {
     if (isAnalyzing) return;
 
     let targetMaterial: any = null;
+    let courseId = materialHash;
 
     if (activeTab === 'file') {
       if (!material) {
@@ -139,6 +162,18 @@ export const UploadPanel: React.FC = () => {
         fileType: 'text',
         rawText: trimmed,
       };
+
+      // Same cache shortcut for pasted notes.
+      try {
+        courseId = await hashContent(trimmed);
+        const cached = await getCourse(courseId);
+        if (cached) {
+          openCourse(cached);
+          return;
+        }
+      } catch (err) {
+        console.warn('تعذر حساب بصمة النص:', err);
+      }
     }
 
     setIsAnalyzing(true);
@@ -148,6 +183,9 @@ export const UploadPanel: React.FC = () => {
     try {
       const extractedConcepts = await analyzeMaterial(targetMaterial);
       setConcepts(extractedConcepts);
+      if (courseId) {
+        await saveCourse(courseId, targetMaterial, extractedConcepts);
+      }
       setDuckState('encouraging');
       setStep('concepts');
     } catch (err: any) {
@@ -188,6 +226,40 @@ export const UploadPanel: React.FC = () => {
           }
         />
       </div>
+
+      {/* Saved Local Courses Shortcut */}
+      {courses.length > 0 && (
+        <div className="bg-white rounded-2xl border border-amber-200/80 shadow-xs p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="inline-flex items-center gap-2 text-sm font-extrabold text-slate-900">
+              <Library className="w-4 h-4 text-amber-600" />
+              <span>موادي المحفوظة محلياً ({courses.length})</span>
+            </div>
+            <button
+              onClick={() => setStep('courses')}
+              className="text-xs font-bold text-amber-700 hover:underline cursor-pointer"
+            >
+              عرض الكل
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {courses.slice(0, 4).map((course) => (
+              <button
+                key={course.id}
+                onClick={() => openCourse(course)}
+                title="فتح فوري بدون تحليل جديد"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100 transition-all cursor-pointer max-w-full"
+              >
+                <Zap className="w-3 h-3 shrink-0" />
+                <span className="truncate">{course.title}</span>
+                <span className="text-[10px] text-amber-700 shrink-0">
+                  ({course.concepts.length})
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Upload Box Container */}
       <div className="bg-white rounded-2xl border border-amber-200/80 shadow-sm p-6 space-y-6">
@@ -237,7 +309,7 @@ export const UploadPanel: React.FC = () => {
                 ref={fileInputRef}
                 type="file"
                 accept=".pdf,.txt,.md"
-                onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
+                onChange={(e) => e.target.files?.[0] && void handleFileSelect(e.target.files[0])}
                 className="hidden"
               />
 
@@ -274,7 +346,10 @@ export const UploadPanel: React.FC = () => {
                   </div>
                 </div>
                 <button
-                  onClick={() => setMaterial(null)}
+                  onClick={() => {
+                    setMaterial(null);
+                    setMaterialHash(null);
+                  }}
                   className="text-xs text-rose-600 font-bold hover:underline"
                 >
                   حذف الملف
@@ -350,26 +425,26 @@ export const UploadPanel: React.FC = () => {
       </div>
 
       {/* Quick Launch Academic Tools */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
         <button
-          onClick={() => setStep('planner')}
+          onClick={() => setStep('roadmap')}
           className="p-4 bg-white hover:bg-amber-50/80 rounded-2xl border border-amber-200 shadow-2xs hover:shadow-md transition-all text-right flex items-start gap-3 group"
         >
           <div className="p-2.5 bg-amber-100 text-amber-900 rounded-xl group-hover:scale-105 transition-transform shrink-0">
-            <span className="text-xl">📅</span>
+            <span className="text-xl">🗺️</span>
           </div>
           <div>
             <h3 className="font-extrabold text-slate-900 text-sm group-hover:text-amber-950">
-              خطة الانضباط الدراسي
+              خريطة المقرر
             </h3>
             <p className="text-xs font-medium text-slate-500 mt-0.5">
-              مخطط الدراسة الدقيق الملتزم ببيانات المستند المرفق وتنبيهات الاختبارات.
+              جدولك الأسبوعي من توصيف المادة الرسمي، مع عدّاد المحطات وشارات إتقان كل مفهوم.
             </p>
           </div>
         </button>
 
         <button
-          onClick={() => setStep('projectLab')}
+          onClick={() => setStep('codeLab')}
           className="p-4 bg-white hover:bg-amber-50/80 rounded-2xl border border-amber-200 shadow-2xs hover:shadow-md transition-all text-right flex items-start gap-3 group"
         >
           <div className="p-2.5 bg-amber-100 text-amber-900 rounded-xl group-hover:scale-105 transition-transform shrink-0">
@@ -380,27 +455,11 @@ export const UploadPanel: React.FC = () => {
               معمل البرمجة
             </h3>
             <p className="text-xs font-medium text-slate-500 mt-0.5">
-              توليد 3 مشاريع متدرجة الصعوبة وتحليل وتقييم الشفرات البرمجية بالدرجات.
+              نمطان في مساحة واحدة: تحدي بناء ميزة بتذكرة عمل حقيقية، أو صيد ثغرة مزروعة في كود واقعي.
             </p>
           </div>
         </button>
 
-        <button
-          onClick={() => setStep('bugLab')}
-          className="p-4 bg-white hover:bg-amber-50/80 rounded-2xl border border-amber-200 shadow-2xs hover:shadow-md transition-all text-right flex items-start gap-3 group"
-        >
-          <div className="p-2.5 bg-amber-100 text-amber-900 rounded-xl group-hover:scale-105 transition-transform shrink-0">
-            <span className="text-xl">🐛</span>
-          </div>
-          <div>
-            <h3 className="font-extrabold text-slate-900 text-sm group-hover:text-amber-950">
-              صياد الثغرات
-            </h3>
-            <p className="text-xs font-medium text-slate-500 mt-0.5">
-              تحديات اكتشاف الأخطاء الخفية ومعالجة ثغرات المنطق والذاكرة.
-            </p>
-          </div>
-        </button>
       </div>
     </div>
   );

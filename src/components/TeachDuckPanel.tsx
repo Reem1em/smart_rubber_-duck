@@ -5,6 +5,7 @@ import { diagnoseExplanation } from '../services/ai';
 import { useMicrophone } from '../hooks/useMicrophone';
 import { isRateLimitError } from '../utils/rateLimit';
 import { DuckCharacter } from './DuckCharacter';
+import { MathView } from './MathView';
 import { ConfidenceSlider } from './ConfidenceSlider';
 import {
   Mic,
@@ -122,7 +123,7 @@ export const TeachDuckPanel: React.FC = () => {
         </button>
 
         <span className="text-xs font-bold text-amber-900 bg-amber-100 px-3.5 py-1 rounded-full border border-amber-200">
-          المفهوم المستهدف: {selectedConcept.name}
+          المفهوم المستهدف: <MathView content={selectedConcept.name} asInline />
         </span>
       </div>
 
@@ -148,7 +149,7 @@ export const TeachDuckPanel: React.FC = () => {
                 {selectedConcept.chapterOrUnit}
               </span>
             )}
-            <span>مرجع المفهوم: {selectedConcept.name}</span>
+            <span>مرجع المفهوم: <MathView content={selectedConcept.name} asInline /></span>
           </div>
           <span className="text-xs font-bold uppercase text-amber-800 bg-amber-200/80 px-2.5 py-0.5 rounded">
             {selectedConcept.difficulty === 'basic' ? 'بسيط' : selectedConcept.difficulty === 'intermediate' ? 'متوسط' : 'متقدم'}
@@ -157,10 +158,10 @@ export const TeachDuckPanel: React.FC = () => {
         {selectedConcept.coreFocus && (
           <div className="text-xs bg-white/80 p-2 rounded-lg border border-amber-200/60 text-amber-900 font-medium">
             <span className="font-bold text-amber-950 ml-1">التركيز الجوهري المطلوب:</span>
-            {selectedConcept.coreFocus}
+            <MathView content={selectedConcept.coreFocus} asInline />
           </div>
         )}
-        <p className="text-slate-700 text-xs sm:text-sm leading-relaxed">{selectedConcept.summary}</p>
+        <p className="text-slate-700 text-xs sm:text-sm leading-relaxed"><MathView content={selectedConcept.summary} asInline /></p>
       </div>
 
       {/* Explanation Box + Voice Control */}

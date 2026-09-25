@@ -19,6 +19,18 @@ interface MathViewProps {
 export function sanitizeMathSyntax(raw: string): string {
   if (!raw) return '';
 
+  // LaTeX segments ($$ ... $$ / $ ... $) are already canonical: normalizing them
+  // would corrupt commands such as \sqrt{x}, A^{-1} or \begin{bmatrix}.
+  // Sanitize only the plain-text segments between them.
+  return raw
+    .split(/(\$\$[\s\S]+?\$\$|\$[^\$\n]+?\$)/g)
+    .map((segment) => (segment.startsWith('$') ? segment : sanitizePlainSegment(segment)))
+    .join('');
+}
+
+function sanitizePlainSegment(raw: string): string {
+  if (!raw) return '';
+
   let text = raw;
 
   // 1. Convert developer nested arrays like [[1, 4], [2, 3]] or [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
@@ -94,8 +106,12 @@ export const MathView: React.FC<MathViewProps> = ({ content, className = '', asI
     parseTextForVisualBlocks(sanitized.substring(lastIdx), blocks);
   }
 
+  // In inline contexts (headings, pills, sentences) a `<div>` is invalid markup and a
+  // centered display block breaks the layout, so render everything as inline phrasing content.
+  const Root = asInline ? 'span' : 'div';
+
   return (
-    <div className={`leading-relaxed ${className} ${asInline ? 'inline' : ''}`}>
+    <Root className={`leading-relaxed ${className} ${asInline ? 'inline' : ''}`}>
       {blocks.map((block, idx) => {
         if (block.type === 'matrix' && block.matrixRows) {
           return (
@@ -137,13 +153,17 @@ export const MathView: React.FC<MathViewProps> = ({ content, className = '', asI
         if (block.type === 'latex-block') {
           try {
             const html = katex.renderToString(block.content, {
-              displayMode: true,
+              displayMode: !asInline,
               throwOnError: false,
             });
             return (
               <span
                 key={`latex-${idx}`}
-                className="my-3 block text-center overflow-x-auto py-1"
+                className={
+                  asInline
+                    ? 'inline-block px-1 align-baseline'
+                    : 'my-3 block text-center overflow-x-auto py-1'
+                }
                 dangerouslySetInnerHTML={{ __html: html }}
               />
             );
@@ -159,7 +179,7 @@ export const MathView: React.FC<MathViewProps> = ({ content, className = '', asI
         // Regular text with potential inline math ($...$ or unicode)
         return <InlineTextSegment key={`text-${idx}`} text={block.content} />;
       })}
-    </div>
+    </Root>
   );
 };
 

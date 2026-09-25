@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 
 import { generateWithFallback } from '../gemini';
+import { handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildProjectReviewPrompt } from '../prompts/reviewProject';
 import { projectReviewSchema } from '../schemas/reviewProject';
@@ -26,7 +27,6 @@ export const handleReviewProject = async (req: Request, res: Response) => {
     }
     throw new Error('Invalid project review response structure');
   } catch (err: any) {
-    console.warn('Fallback triggered for review-project:', err?.message || err);
-    return res.json(projectReviewFallback(req.body));
+    return handleModelFailure(res, 'review-project', err, () => projectReviewFallback(req.body));
   }
 };

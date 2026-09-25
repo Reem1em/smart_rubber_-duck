@@ -1,4 +1,5 @@
 import { isRateLimitError } from './rateLimit';
+import { absorbAuthHeaders, authHeaders } from '../services/authSession';
 
 export async function fetchWithTimeout(
   url: string,
@@ -11,8 +12,10 @@ export async function fetchWithTimeout(
   try {
     const response = await fetch(url, {
       ...options,
+      headers: { ...authHeaders(), ...(options.headers as Record<string, string> | undefined) },
       signal: controller.signal,
     });
+    absorbAuthHeaders(response);
 
     if (response.status === 429) {
       const errData = await response.json().catch(() => ({}));

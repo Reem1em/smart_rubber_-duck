@@ -1,10 +1,12 @@
 import type { Request, Response } from 'express';
 
 import { generateWithFallback } from '../gemini';
+import { handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildDiagnosePrompt } from '../prompts/diagnose';
 import { diagnoseSchema } from '../schemas/diagnose';
 import { diagnoseFallback } from '../fallbacks/diagnose';
+import { isStemTopic } from '../stem';
 
 export const handleDiagnose = async (req: Request, res: Response) => {
   try {
@@ -14,7 +16,9 @@ export const handleDiagnose = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'يرجى تقديم المفهوم وشرح الطالب.' });
     }
 
-    const prompt = buildDiagnosePrompt({ concept, studentExplanation, confidenceLevel, materialContext });
+    const isStem = isStemTopic(concept?.name, concept?.summary, concept?.keyPrinciples, materialContext);
+
+    const prompt = buildDiagnosePrompt({ concept, studentExplanation, confidenceLevel, materialContext, isStem });
 
     const response = await generateWithFallback({
       contents: prompt,
@@ -27,7 +31,6 @@ export const handleDiagnose = async (req: Request, res: Response) => {
     const parsed = parseModelJson(response.text);
     return res.json(parsed);
   } catch (err: any) {
-    console.warn('Fallback triggered for diagnose:', err?.message || err);
-    return res.json(diagnoseFallback(req.body));
+    return handleModelFailure(res, 'diagnose', err, () => diagnoseFallback(req.body));
   }
 };

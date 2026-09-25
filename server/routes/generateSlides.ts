@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 
 import { generateWithFallback } from '../gemini';
+import { handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildSlidesPrompt } from '../prompts/generateSlides';
 import { slidesSchema } from '../schemas/generateSlides';
@@ -30,7 +31,6 @@ export const handleGenerateSlides = async (req: Request, res: Response) => {
     }
     throw new Error('Invalid slide response structure from model');
   } catch (err: any) {
-    console.warn('Fallback triggered for generate-slides:', err?.message || err);
-    return res.json(slidesFallback(req.body));
+    return handleModelFailure(res, 'generate-slides', err, () => slidesFallback(req.body));
   }
 };

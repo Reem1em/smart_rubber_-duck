@@ -1,3 +1,5 @@
+import { isStemTopic } from '../stem';
+
 /** Static payload served when every model in the chain fails. */
 export function quizFallback(body: any) {
   const conceptName = body?.concept?.name || 'المفهوم المدروس';
@@ -7,26 +9,16 @@ export function quizFallback(body: any) {
   const p2 = keyPrinciples[1] || 'التطبيق العملي السليم للخصائص';
   const p3 = keyPrinciples[2] || 'تحليل الحالات والمعطيات المرتبطة';
 
-  const isMath =
-    conceptName.includes('مصفوف') ||
-    conceptName.includes('جبر') ||
-    conceptName.includes('تفاضل') ||
-    conceptName.includes('تكامل') ||
-    conceptName.includes('متجه') ||
-    conceptName.includes('محدد') ||
-    conceptName.includes('matrix') ||
-    conceptName.includes('calculus') ||
-    conceptName.includes('vector');
-
-  if (isMath) {
+  if (isStemTopic(conceptName, conceptSummary, keyPrinciples)) {
     return {
       questions: [
         {
           id: 1,
-          question: `لدينا المصفوفة A:
-| 1   4 |
-| 2   3 |
-ما هي القيمة العددية لمحدد المصفوفة det(A)؟`,
+          question: `احسب محدد المصفوفة A:
+
+$$A = \\begin{bmatrix} 1 & 4 \\\\ 2 & 3 \\end{bmatrix}$$
+
+ما هي القيمة العددية لـ $\\det(A)$؟`,
           options: [
             '-5',
             '11',
@@ -34,52 +26,69 @@ export function quizFallback(body: any) {
             '-11',
           ],
           correctAnswerIndex: 0,
-          explanation: `محدد المصفوفة 2×2 يُحسب بضرب عناصر القطر الرئيسي وطرح حاصل ضرب عناصر القطر الآخر: det(A) = (1 × 3) - (4 × 2) = 3 - 8 = -5.`,
+          explanation: `محدد المصفوفة 2×2 هو حاصل ضرب القطر الرئيسي ناقص حاصل ضرب القطر الثانوي:
+
+$$\\det(A) = (1 \\times 3) - (4 \\times 2) = 3 - 8 = -5$$`,
           difficulty: 'بسيط',
         },
         {
           id: 2,
-          question: `ما هو الشرط الرياضي الأساسي لكي تكون المصفوفة المربعة A قابلة للعكس ولها معكوس A⁻¹؟`,
+          question: `احسب العنصر الواقع في الصف الأول والعمود الأول من حاصل الضرب $A \\times B$:
+
+$$A = \\begin{bmatrix} 1 & 2 \\\\ 0 & 3 \\end{bmatrix}, \\quad B = \\begin{bmatrix} 5 & 9 \\\\ 1 & 4 \\end{bmatrix}$$`,
           options: [
-            'أن يكون محدد المصفوفة det(A) ≠ 0',
-            'أن تكون جميع عناصر المصفوفة موجبة',
-            'أن يكون محدد المصفوفة det(A) = 0',
-            'أن تكون رتبة المصفوفة فردية فقط',
+            '7',
+            '14',
+            '5',
+            '11',
           ],
           correctAnswerIndex: 0,
-          explanation: `المصفوفة تمتلك معكوساً A⁻¹ وتكون غير شاذة (Invertible) إذا وفقط إذا كان محددها غير صفري det(A) ≠ 0.`,
+          explanation: `العنصر (1,1) هو ضرب الصف الأول من A في العمود الأول من B:
+
+$$(1 \\times 5) + (2 \\times 1) = 5 + 2 = 7$$`,
           difficulty: 'بسيط',
         },
         {
           id: 3,
-          question: `ما هي مشتقة الدالة f(x) = x³ + 4x² - 5x + 7؟`,
+          question: `احسب مشتقة الدالة:
+
+$$f(x) = x^{3} + 4x^{2} - 5x + 7$$`,
           options: [
-            "f'(x) = 3x² + 8x - 5",
-            "f'(x) = x² + 8x - 5",
-            "f'(x) = 3x² + 4x - 5",
-            "f'(x) = 3x² + 8x",
+            "$f'(x) = 3x^{2} + 8x - 5$",
+            "$f'(x) = x^{2} + 8x - 5$",
+            "$f'(x) = 3x^{2} + 4x - 5$",
+            "$f'(x) = 3x^{2} + 8x$",
           ],
           correctAnswerIndex: 0,
-          explanation: `بتطبيق قاعدة القوى في التفاضل: مشتقة x³ هي 3x²، ومشتقة 4x² هي 8x، ومشتقة -5x هي -5، ومشتقة الثابت 7 هي 0.`,
+          explanation: `بتطبيق قاعدة القوى حداً بحد:
+
+$$f'(x) = 3x^{2} + 8x - 5$$
+
+ومشتقة الثابت 7 تساوي صفراً.`,
           difficulty: 'متوسط',
         },
         {
           id: 4,
-          question: `ما هو ناتج التكامل غير المحدد التالي:
-∫ (2x + 1) dx`,
+          question: `احسب ناتج التكامل غير المحدد:
+
+$$\\int (2x + 1)\\,dx$$`,
           options: [
-            'x² + x + C',
-            '2x² + x + C',
-            'x² + C',
-            '2x + C',
+            '$x^{2} + x + C$',
+            '$2x^{2} + x + C$',
+            '$x^{2} + C$',
+            '$2x + C$',
           ],
           correctAnswerIndex: 0,
-          explanation: `تكامل 2x بالنسبة لـ x هو 2(x²/2) = x²، وتكامل الثابت 1 هو x، مع إضافة ثابت التكامل C.`,
+          explanation: `بتطبيق قاعدة رفع الأس:
+
+$$\\int (2x + 1)\\,dx = x^{2} + x + C$$`,
           difficulty: 'متوسط',
         },
         {
           id: 5,
-          question: `إذا كان لدينا المتجهان u = ⟨1, 2⟩ و v = ⟨3, -1⟩، فما هو ناتج الضرب القياسي (الداخلي) u · v؟`,
+          question: `احسب الضرب القياسي للمتجهين:
+
+$$\\vec{u} = \\langle 1, 2 \\rangle, \\quad \\vec{v} = \\langle 3, -1 \\rangle$$`,
           options: [
             '1',
             '5',
@@ -87,7 +96,9 @@ export function quizFallback(body: any) {
             '-1',
           ],
           correctAnswerIndex: 0,
-          explanation: `الضرب النقطي يُحسب بضرب المركبات المتناظرة ثم جمعها: u · v = (1 × 3) + (2 × -1) = 3 - 2 = 1.`,
+          explanation: `بضرب المركبات المتناظرة ثم جمعها:
+
+$$\\vec{u} \\cdot \\vec{v} = (1 \\times 3) + (2 \\times -1) = 3 - 2 = 1$$`,
           difficulty: 'متقدم',
         },
       ],

@@ -243,7 +243,7 @@ export const QuizPanel: React.FC = () => {
           <span>اختبار قياس الاستيعاب القصير (5-7 أسئلة)</span>
         </span>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-          اختبر إتقانك لمفهوم: <span className="text-amber-700">{selectedConcept.name}</span>
+          اختبر إتقانك لمفهوم: <span className="text-amber-700"><MathView content={selectedConcept.name} asInline /></span>
         </h2>
         <p className="text-slate-600 text-sm max-w-lg mx-auto">
           أسئلة محددة تتدرج من السهل إلى الصعب لتأكيد جودة محاكمتك العقلية قبل التقرير النهائي.

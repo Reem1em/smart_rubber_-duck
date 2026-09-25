@@ -1,5 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 
+import { recordModelUsage } from './auth/quota';
+
 /** Tried in order; each model falls through to the next on error, quota or timeout. */
 const MODEL_CHAIN = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
 const DEFAULT_TIMEOUT_MS = 40000;
@@ -60,9 +62,10 @@ export async function generateWithFallback(params: { contents: any; config?: any
         model,
       });
 
-      const result = await Promise.race([apiPromise, timeoutPromise]);
+      const result: any = await Promise.race([apiPromise, timeoutPromise]);
       if (timeoutId) clearTimeout(timeoutId);
-      return result as any;
+      await recordModelUsage(result?.usageMetadata?.totalTokenCount);
+      return result;
     } catch (err: any) {
       if (timeoutId) clearTimeout(timeoutId);
       lastError = err;

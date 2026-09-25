@@ -21,20 +21,20 @@ export const analyzeMaterialSchema = {
               properties: {
                 name: {
                   type: Type.STRING,
-                  description: 'اسم المفهوم العلمي أو التطبيقي الدقيق'
+                  description: 'اسم المفهوم العلمي أو التطبيقي الدقيق. أي رمز رياضي يُكتب بدولار مفرد $m$ ويُمنع $$ ... $$'
                 },
                 coreFocus: {
                   type: Type.STRING,
-                  description: 'شرح تطبيقي موجز في سطر واحد لما يجب أن يشرحه الطالب صوتياً'
+                  description: 'شرح تطبيقي موجز في سطر واحد لما يجب أن يشرحه الطالب صوتياً. الرموز بدولار مفرد $a_{ij}$ ويُمنع $$ ... $$'
                 },
                 summary: {
                   type: Type.STRING,
-                  description: 'ملخص علمي دقيق في سطرين يوضح المفهوم وقوانينه وتطبيقاته'
+                  description: 'ملخص علمي دقيق في سطرين يوضح المفهوم وقوانينه وتطبيقاته. الرموز بدولار مفرد $m$ ، وكتل $$ ... $$ فقط لمعادلة مستقلة كاملة'
                 },
                 keyPrinciples: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING },
-                  description: '2 إلى 3 قوانين أو مبادئ أو قواعد تقنية ترتبط بهذا المفهوم'
+                  description: '2 إلى 3 قوانين أو مبادئ أو قواعد تقنية ترتبط بهذا المفهوم. عبارات قصيرة بدولار مفرد فقط ويُمنع $$ ... $$'
                 },
                 difficulty: {
                   type: Type.STRING,

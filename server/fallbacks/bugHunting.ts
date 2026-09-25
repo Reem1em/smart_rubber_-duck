@@ -1,36 +1,26 @@
+import { isStemTopic } from '../stem';
+
 /** Static payload served when every model in the chain fails. */
 export function bugChallengeFallback(body: any) {
   const lang = body?.language || 'جبر المصفوفات والمحددات';
-  const isMath =
-    lang.includes('مصفوف') ||
-    lang.includes('جبر') ||
-    lang.includes('تفاضل') ||
-    lang.includes('تكامل') ||
-    lang.includes('متجه') ||
-    lang.includes('Algebra') ||
-    lang.includes('Calculus') ||
-    lang.includes('Math');
 
-  if (isMath) {
+  if (isStemTopic(lang)) {
     return {
       type: 'debugging_challenge',
       challenge: {
-        title: 'صيد الخطأ الحسابي: ضرب المصفوفات',
+        title: 'صيد الخطأ الحسابي: محدد مصفوفة 2×2',
         language: lang,
         difficulty: 'Intermediate',
-        expectedBehavior: 'المطلوب حساب حاصل ضرب المصفوفة A في B بضرب صف A في عمود B بدقة.',
-        buggyCode: `السؤال:
-لدينا المصفوفتان:
-المصفوفة A =
-[ 1   2 ]
+        expectedBehavior: 'المطلوب حساب محدد المصفوفة بطرح حاصل ضرب القطر الثانوي من حاصل ضرب القطر الرئيسي.',
+        buggyCode: `المصفوفة A:
 
-المصفوفة B =
-[ 5   9 ]
+$$A = \\begin{bmatrix} 1 & 4 \\\\ 2 & 3 \\end{bmatrix}$$
 
-إذا قام الزميل بحساب ضرب A × B كالتالي:
-[ (1 × 5) + (2 × ?) ]
+خطوة كواكلي:
 
-وين الغلطة الحسابية أو المنطقية في حله؟ اشرح لي بصوتك إيش الخطوة الصح.`,
+$$\\det(A) = (1 \\times 3) + (4 \\times 2) = 11$$
+
+وين الغلطة في خطوتي؟ اشرح لي بصوتك إيش الخطوة الصح وليه.`,
         totalBugsCount: 1,
       },
     };
@@ -78,8 +68,7 @@ export function bugEvaluationFallback() {
     ],
     missedBugs: [],
     correctedCode: `المحدد الصحيح للمصفوفة A:
-| 1   4 |
-| 2   3 |
-det(A) = (1 × 3) - (4 × 2) = 3 - 8 = -5.`,
+
+$$\\det(A) = (1 \\times 3) - (4 \\times 2) = 3 - 8 = -5$$`,
   };
 }

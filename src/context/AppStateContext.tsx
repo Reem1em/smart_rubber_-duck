@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState } from 'react';
 import {
   AppStep,
   Concept,
+  CourseRoadmap,
+  ExamMilestonePlan,
+  SavedCourse,
   DiagnosisResult,
   DuckState,
   FinalDiagnosisResult,
@@ -10,7 +13,10 @@ import {
   QuizResult,
   SocraticEvaluation,
   TransferChallenge,
+  WorkspaceExport,
 } from '../types';
+import * as courseStore from '../services/courseStore';
+import { useAuth } from './AuthContext';
 
 interface AppState {
   step: AppStep;
@@ -57,6 +63,49 @@ interface AppState {
   closeRateLimitModal: () => void;
   resetAll: () => void;
   retryConcept: () => void;
+
+  /* ---- Local-first "My Courses" (موادي) workspace ---- */
+  courses: SavedCourse[];
+  activeCourseId: string | null;
+  isCoursesLoading: boolean;
+  refreshCourses: () => Promise<void>;
+  /** Persists a freshly analyzed material as a cached course and activates it. */
+  saveCourse: (id: string, material: MaterialInput, concepts: Concept[]) => Promise<void>;
+  /** Loads a cached course into the canvas with zero AI calls. */
+  openCourse: (course: SavedCourse) => void;
+  removeCourse: (id: string) => Promise<void>;
+  markActiveConceptMastered: (conceptId: string) => Promise<void>;
+  /** Flags a comprehension gap so "خريطة المقرر" slots the concept into the review bucket. */
+  markActiveConceptGap: (conceptId: string) => Promise<void>;
+  /** Marks a concept as picked up but not settled yet (🟡 قيد التثبيت). */
+  markActiveConceptInProgress: (conceptId: string) => Promise<void>;
+  exportWorkspace: () => Promise<WorkspaceExport>;
+  importWorkspace: (payload: unknown) => Promise<number>;
+
+  /* ---- Course Roadmap (خريطة المقرر) ---- */
+  /** The active course, resolved from the local workspace. */
+  activeCourse: SavedCourse | null;
+  /** Caches a freshly built roadmap on the active course. */
+  saveActiveRoadmap: (roadmap: CourseRoadmap) => Promise<void>;
+  /** Drops the cached roadmap so the setup wizard can run again. */
+  resetActiveRoadmap: () => Promise<void>;
+  /** Opens a concept's voice-explanation session straight from the roadmap. */
+  startConceptSession: (conceptId: string) => void;
+  /** Stores the exam sprint the student is currently training for. */
+  saveActiveMilestonePlan: (plan: ExamMilestonePlan) => Promise<void>;
+  /** Drops the active exam sprint. */
+  clearActiveMilestonePlan: () => Promise<void>;
+
+  /* ---- Course-isolated tutor chat (اسأل كواكلي) ---- */
+  isChatOpen: boolean;
+  /** Concept the chat should explain; null for a free-form question. */
+  chatConcept: Concept | null;
+  /** Set once by a "اشرحه لي" tap; the drawer consumes it and sends it automatically. */
+  pendingChatPrompt: string | null;
+  consumePendingChatPrompt: () => void;
+  /** Opens the drawer, optionally seeded with a concept explanation request. */
+  openCourseChat: (concept?: Concept | null) => void;
+  closeCourseChat: () => void;
 }
 
 const AppStateContext = createContext<AppState | undefined>(undefined);
@@ -91,6 +140,15 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
   const [error, setError] = useState<string | null>(null);
   const [rateLimitModalOpen, setRateLimitModalOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatConcept, setChatConcept] = useState<Concept | null>(null);
+  const [pendingChatPrompt, setPendingChatPrompt] = useState<string | null>(null);
+  const [courses, setCourses] = useState<SavedCourse[]>([]);
+  const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
+  const [isCoursesLoading, setIsCoursesLoading] = useState(true);
+  const { status: authStatus, user } = useAuth();
+  /** Owner stamped on saved courses; null keeps them as guest (local-only) courses. */
+  const ownerId = user?.id ?? null;
 
   React.useEffect(() => {
     if (typeof document !== 'undefined') {
@@ -109,6 +167,178 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     }
   }, [theme]);
+
+  const refreshCourses = React.useCallback(async () => {
+    try {
+      setCourses(await courseStore.listCourses(ownerId));
+    } catch (err) {
+      console.warn('تعذر قراءة مساحة المواد المحلية:', err);
+    } finally {
+      setIsCoursesLoading(false);
+    }
+  }, [ownerId]);
+
+  React.useEffect(() => {
+    // Wait for the session check so a signed-in student never sees a guest-only list flash by.
+    if (authStatus === 'loading') return;
+    void (async () => {
+      if (ownerId) {
+        try {
+          await courseStore.claimUnownedCourses(ownerId);
+        } catch (err) {
+          console.warn('تعذر ربط المواد المحلية بحسابك:', err);
+        }
+      }
+      await refreshCourses();
+    })();
+  }, [authStatus, ownerId, refreshCourses]);
+
+  const saveCourse = async (id: string, mat: MaterialInput, extracted: Concept[]) => {
+    try {
+      await courseStore.upsertCourseFromMaterial(id, mat, extracted, ownerId);
+      setActiveCourseId(id);
+      await refreshCourses();
+    } catch (err) {
+      console.warn('تعذر حفظ المادة محلياً:', err);
+    }
+  };
+
+  const openCourse = (course: SavedCourse) => {
+    setActiveCourseId(course.id);
+    setMaterial(course.material);
+    setConcepts(course.concepts);
+    setSelectedConcept(null);
+    setStudentExplanation('');
+    setConfidenceLevel(70);
+    setDiagnosis(null);
+    setSocraticAnswer('');
+    setSocraticEvaluation(null);
+    setTransferChallenge(null);
+    setTransferAnswer('');
+    setQuizQuestions([]);
+    setQuizResult(null);
+    setFinalDiagnosis(null);
+    setError(null);
+    setDuckState('encouraging');
+    setStep('concepts');
+  };
+
+  const removeCourse = async (id: string) => {
+    await courseStore.deleteCourse(id);
+    if (activeCourseId === id) setActiveCourseId(null);
+    await refreshCourses();
+  };
+
+  const markActiveConceptMastered = async (conceptId: string) => {
+    if (!activeCourseId || !conceptId) return;
+    try {
+      await courseStore.markConceptMastered(activeCourseId, conceptId);
+      await refreshCourses();
+    } catch (err) {
+      console.warn('تعذر تحديث تقدم المادة:', err);
+    }
+  };
+
+  const markActiveConceptGap = async (conceptId: string) => {
+    if (!activeCourseId || !conceptId) return;
+    try {
+      await courseStore.markConceptGap(activeCourseId, conceptId);
+      await refreshCourses();
+    } catch (err) {
+      console.warn('تعذر تسجيل الثغرة في خريطة المقرر:', err);
+    }
+  };
+
+  const markActiveConceptInProgress = async (conceptId: string) => {
+    if (!activeCourseId || !conceptId) return;
+    try {
+      await courseStore.markConceptInProgress(activeCourseId, conceptId);
+      await refreshCourses();
+    } catch (err) {
+      console.warn('تعذر تحديث حالة المفهوم:', err);
+    }
+  };
+
+  const activeCourse = React.useMemo(
+    () => courses.find((course) => course.id === activeCourseId) ?? null,
+    [courses, activeCourseId]
+  );
+
+  const saveActiveRoadmap = async (roadmap: CourseRoadmap) => {
+    if (!activeCourseId) return;
+    await courseStore.saveRoadmap(activeCourseId, roadmap);
+    await refreshCourses();
+  };
+
+  const resetActiveRoadmap = async () => {
+    if (!activeCourseId) return;
+    await courseStore.clearRoadmap(activeCourseId);
+    await refreshCourses();
+  };
+
+  const saveActiveMilestonePlan = async (plan: ExamMilestonePlan) => {
+    if (!activeCourseId) return;
+    await courseStore.saveMilestonePlan(activeCourseId, plan);
+    await refreshCourses();
+  };
+
+  const clearActiveMilestonePlan = async () => {
+    if (!activeCourseId) return;
+    await courseStore.clearMilestonePlan(activeCourseId);
+    await refreshCourses();
+  };
+
+  const openCourseChat = (concept?: Concept | null) => {
+    setChatConcept(concept ?? null);
+    setPendingChatPrompt(
+      concept ? `اشرح لي مفهوم ${concept.name} ببساطة وبأمثلة عملية` : null
+    );
+    setIsChatOpen(true);
+  };
+
+  const closeCourseChat = () => {
+    setIsChatOpen(false);
+    setPendingChatPrompt(null);
+  };
+
+  const consumePendingChatPrompt = () => setPendingChatPrompt(null);
+
+  /** Jumps from a roadmap card straight into the voice-explanation loop for one concept. */
+  const startConceptSession = (conceptId: string) => {
+    const pool = concepts.length > 0 ? concepts : activeCourse?.concepts ?? [];
+    const concept = pool.find((c) => c.id === conceptId);
+    if (!concept) return;
+
+    if (concepts.length === 0 && activeCourse) {
+      setConcepts(activeCourse.concepts);
+      setMaterial(activeCourse.material);
+    }
+
+    setSelectedConcept(concept);
+    setStudentExplanation('');
+    setConfidenceLevel(70);
+    setDiagnosis(null);
+    setSocraticAnswer('');
+    setSocraticEvaluation(null);
+    setTransferChallenge(null);
+    setTransferAnswer('');
+    setQuizQuestions([]);
+    setQuizResult(null);
+    setFinalDiagnosis(null);
+    setError(null);
+    setDuckState('listening');
+    void markActiveConceptInProgress(conceptId);
+    setIsChatOpen(false);
+    setStep('teach');
+  };
+
+  const exportWorkspace = () => courseStore.exportWorkspace(ownerId);
+
+  const importWorkspace = async (payload: unknown) => {
+    const count = await courseStore.importWorkspace(payload, ownerId);
+    await refreshCourses();
+    return count;
+  };
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
@@ -142,6 +372,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setFinalDiagnosis(null);
     setError(null);
     setRateLimitModalOpen(false);
+    setActiveCourseId(null);
   };
 
   const retryConcept = () => {
@@ -208,6 +439,30 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         closeRateLimitModal,
         resetAll,
         retryConcept,
+        courses,
+        activeCourseId,
+        isCoursesLoading,
+        refreshCourses,
+        saveCourse,
+        openCourse,
+        removeCourse,
+        markActiveConceptMastered,
+        markActiveConceptGap,
+        markActiveConceptInProgress,
+        exportWorkspace,
+        importWorkspace,
+        activeCourse,
+        saveActiveRoadmap,
+        resetActiveRoadmap,
+        startConceptSession,
+        saveActiveMilestonePlan,
+        clearActiveMilestonePlan,
+        isChatOpen,
+        chatConcept,
+        pendingChatPrompt,
+        consumePendingChatPrompt,
+        openCourseChat,
+        closeCourseChat,
       }}
     >
       {children}

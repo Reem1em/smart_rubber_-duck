@@ -1,10 +1,12 @@
 import type { Request, Response } from 'express';
 
 import { generateWithFallback } from '../gemini';
+import { handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildQuizPrompt } from '../prompts/generateQuiz';
 import { quizSchema } from '../schemas/generateQuiz';
 import { quizFallback } from '../fallbacks/generateQuiz';
+import { isStemTopic } from '../stem';
 
 export const handleGenerateQuiz = async (req: Request, res: Response) => {
   try {
@@ -15,7 +17,9 @@ export const handleGenerateQuiz = async (req: Request, res: Response) => {
     const keyPrinciples = Array.isArray(concept?.keyPrinciples) ? concept.keyPrinciples : [];
     const principlesText = keyPrinciples.join(' - ');
 
-    const prompt = buildQuizPrompt({ conceptName, conceptSummary, principlesText, materialContext, studentExplanation, transferAnswer });
+    const isStem = isStemTopic(conceptName, conceptSummary, keyPrinciples, materialContext);
+
+    const prompt = buildQuizPrompt({ conceptName, conceptSummary, principlesText, materialContext, studentExplanation, transferAnswer, isStem });
 
     const response = await generateWithFallback({
       contents: prompt,
@@ -31,7 +35,6 @@ export const handleGenerateQuiz = async (req: Request, res: Response) => {
     }
     throw new Error('Invalid quiz response');
   } catch (err: any) {
-    console.warn('Fallback triggered for generate-quiz:', err?.message || err);
-    return res.json(quizFallback(req.body));
+    return handleModelFailure(res, 'generate-quiz', err, () => quizFallback(req.body));
   }
 };

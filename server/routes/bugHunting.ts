@@ -1,10 +1,12 @@
 import type { Request, Response } from 'express';
 
 import { generateWithFallback } from '../gemini';
+import { handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildBugChallengePrompt, buildBugEvaluationPrompt } from '../prompts/bugHunting';
 import { bugChallengeSchema, bugEvaluationSchema } from '../schemas/bugHunting';
 import { bugChallengeFallback, bugEvaluationFallback } from '../fallbacks/bugHunting';
+import { isStemTopic } from '../stem';
 
 export const handleGenerateBugChallenge = async (req: Request, res: Response) => {
   try {
@@ -12,16 +14,7 @@ export const handleGenerateBugChallenge = async (req: Request, res: Response) =>
     const lang = language || 'جبر المصفوفات والمحددات';
     const diff = difficulty || 'Intermediate';
 
-    const isMath =
-      lang.includes('مصفوف') ||
-      lang.includes('جبر') ||
-      lang.includes('تفاضل') ||
-      lang.includes('تكامل') ||
-      lang.includes('متجه') ||
-      lang.includes('Algebra') ||
-      lang.includes('Calculus') ||
-      lang.includes('Vector') ||
-      lang.includes('Math');
+    const isMath = isStemTopic(lang);
 
     const prompt = buildBugChallengePrompt({ isMath, lang, diff });
 
@@ -39,16 +32,20 @@ export const handleGenerateBugChallenge = async (req: Request, res: Response) =>
     }
     throw new Error('Invalid bug challenge response');
   } catch (err: any) {
-    console.warn('Fallback triggered for generate-bug-challenge:', err?.message || err);
-    return res.json(bugChallengeFallback(req.body));
+    return handleModelFailure(res, 'bug-hunting', err, () => bugChallengeFallback(req.body));
   }
 };
 
 export const handleEvaluateBugChallenge = async (req: Request, res: Response) => {
   try {
-    const { buggyCode, userFixDescription, expectedBehavior } = req.body;
+    const { buggyCode, userFixDescription, expectedBehavior, language } = req.body;
 
-    const prompt = buildBugEvaluationPrompt({ buggyCode, userFixDescription, expectedBehavior });
+    const prompt = buildBugEvaluationPrompt({
+      buggyCode,
+      userFixDescription,
+      expectedBehavior,
+      isMath: isStemTopic(language, expectedBehavior, buggyCode),
+    });
 
     const response = await generateWithFallback({
       contents: prompt,
@@ -61,7 +58,6 @@ export const handleEvaluateBugChallenge = async (req: Request, res: Response) =>
     const parsed = parseModelJson(response.text);
     return res.json(parsed);
   } catch (err: any) {
-    console.warn('Fallback triggered for evaluate-bug-challenge:', err?.message || err);
-    return res.json(bugEvaluationFallback());
+    return handleModelFailure(res, 'bug-hunting', err, () => bugEvaluationFallback());
   }
 };

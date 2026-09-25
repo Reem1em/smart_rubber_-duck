@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { useAppState } from '../context/AppStateContext';
 import { Concept } from '../types';
 import { DuckCharacter } from './DuckCharacter';
+import { MathView } from './MathView';
 import {
   BookOpen,
   FileUp,
@@ -14,11 +15,20 @@ import {
   Check,
   Clock,
   Mic,
+  MessageCircle,
   FolderGit2,
 } from 'lucide-react';
 
 export const ConceptsPanel: React.FC = () => {
-  const { concepts, setSelectedConcept, setStep, setDuckState, material } = useAppState();
+  const {
+    concepts,
+    setSelectedConcept,
+    setStep,
+    setDuckState,
+    material,
+    markActiveConceptInProgress,
+    openCourseChat,
+  } = useAppState();
   const [selectedChapterFilter, setSelectedChapterFilter] = useState<string>('all');
   const [copiedBreakdown, setCopiedBreakdown] = useState(false);
   const [showBreakdownText, setShowBreakdownText] = useState(false);
@@ -26,6 +36,8 @@ export const ConceptsPanel: React.FC = () => {
   const handleSelectConcept = (concept: Concept) => {
     setSelectedConcept(concept);
     setDuckState('listening');
+    // Opening a concept turns its roadmap badge 🟡 قيد التثبيت until the duck is convinced.
+    void markActiveConceptInProgress(concept.id);
     setStep('teach');
   };
 
@@ -247,7 +259,7 @@ export const ConceptsPanel: React.FC = () => {
                         </div>
 
                         <h4 className="text-lg font-bold text-slate-900 group-hover:text-amber-700 transition-colors">
-                          {concept.name}
+                          <MathView content={concept.name} asInline />
                         </h4>
 
                         {/* Core Focus Line (One-sentence core focus) */}
@@ -256,12 +268,12 @@ export const ConceptsPanel: React.FC = () => {
                             <span className="font-extrabold text-amber-900 ml-1">
                               التركيز الجوهري:
                             </span>
-                            {concept.coreFocus}
+                            <MathView content={concept.coreFocus} asInline />
                           </div>
                         )}
 
                         <p className="text-slate-600 text-xs sm:text-sm leading-relaxed">
-                          {concept.summary}
+                          <MathView content={concept.summary} asInline />
                         </p>
                       </div>
 
@@ -277,7 +289,7 @@ export const ConceptsPanel: React.FC = () => {
                                 key={pIdx}
                                 className="text-xs bg-slate-100 text-slate-800 px-2.5 py-1 rounded-md font-medium"
                               >
-                                • {principle}
+                                • <MathView content={principle} asInline />
                               </span>
                             ))}
                           </div>
@@ -285,19 +297,33 @@ export const ConceptsPanel: React.FC = () => {
                       )}
 
                       {/* Action & Duration Footer */}
-                      <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs">
-                        <div className="flex items-center gap-1 text-slate-500 font-medium">
-                          <Clock className="w-3.5 h-3.5 text-amber-600" />
-                          <span>2 - 3 دقائق شرح</span>
-                        </div>
+                      <div className="space-y-2 pt-3 border-t border-slate-100">
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1 text-slate-500 font-medium">
+                            <Clock className="w-3.5 h-3.5 text-amber-600" />
+                            <span>2 - 3 دقائق شرح</span>
+                          </div>
 
-                        <div className="flex items-center gap-1.5 text-amber-800 font-bold group-hover:text-amber-600 transition-colors">
-                          <Mic className="w-3.5 h-3.5 text-amber-600" />
-                          <span>اشرح هذا المفهوم</span>
-                          <div className="p-1 bg-amber-100 rounded-full group-hover:bg-amber-500 group-hover:text-white transition-all">
-                            <ArrowLeft className="w-3 h-3" />
+                          <div className="flex items-center gap-1.5 text-amber-800 font-bold group-hover:text-amber-600 transition-colors">
+                            <Mic className="w-3.5 h-3.5 text-amber-600" />
+                            <span>اشرح هذا المفهوم</span>
+                            <div className="p-1 bg-amber-100 rounded-full group-hover:bg-amber-500 group-hover:text-white transition-all">
+                              <ArrowLeft className="w-3 h-3" />
+                            </div>
                           </div>
                         </div>
+
+                        {/* Escape hatch: not ready to explain it yet? let the duck explain first. */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openCourseChat(concept);
+                          }}
+                          className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-50 hover:bg-amber-50 text-slate-700 hover:text-amber-900 border border-slate-200 hover:border-amber-300 transition-all cursor-pointer"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 text-amber-600" />
+                          <span>ما فهمته؟ اشرحه لي</span>
+                        </button>
                       </div>
                     </motion.div>
                   );

@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { useAppState } from '../context/AppStateContext';
 import { DuckCharacter } from './DuckCharacter';
+import { MathView } from './MathView';
 import {
   GraduationCap,
   RotateCcw,
@@ -23,11 +24,29 @@ export const FinalDiagnosisPanel: React.FC = () => {
     quizResult,
     retryConcept,
     resetAll,
+    markActiveConceptMastered,
+    markActiveConceptGap,
   } = useAppState();
+
+  const masteryScore = finalDiagnosis?.masteryScore ?? 0;
+  const conceptId = selectedConcept?.id;
+  const hasVerdict = Boolean(finalDiagnosis);
+
+  // Drives both the "موادي" progress badge and the mastery badge in "خريطة المقرر":
+  // a resolved concept turns 🟢 متقن, an unresolved one is flagged 🔴 ثغرة مرصودة and
+  // lands in the weekend consolidation bucket.
+  React.useEffect(() => {
+    if (!conceptId || !hasVerdict) return;
+    if (masteryScore >= 70) {
+      void markActiveConceptMastered(conceptId);
+    } else {
+      void markActiveConceptGap(conceptId);
+    }
+  }, [conceptId, hasVerdict, masteryScore, markActiveConceptMastered, markActiveConceptGap]);
 
   if (!finalDiagnosis || !selectedConcept || !diagnosis) return null;
 
-  const { masteryScore, gapResolved, duckVerdict, duckMood, detailedAnalysis } = finalDiagnosis;
+  const { gapResolved, duckVerdict, duckMood, detailedAnalysis } = finalDiagnosis;
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-emerald-700 border-emerald-300 bg-emerald-50';
@@ -54,7 +73,7 @@ export const FinalDiagnosisPanel: React.FC = () => {
         </div>
 
         <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-          المفهوم المستهدف: <span className="text-amber-700">{selectedConcept.name}</span>
+          المفهوم المستهدف: <span className="text-amber-700"><MathView content={selectedConcept.name} asInline /></span>
         </h2>
 
         {/* Big Score Gauge */}

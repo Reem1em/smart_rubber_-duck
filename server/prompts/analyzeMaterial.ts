@@ -1,3 +1,5 @@
+import { LATEX_DISPLAY_RULES, CONCEPT_MATH_FORMATTING } from '../stem';
+
 export const EXTRACTION_INSTRUCTIONS = `المستند المرفق مخصص للتحليل الأكاديمي الشامل واستخراج خريطة المفاهيم التفصيلية للمقرر:
 # ROLE & IDENTITY:
 You are the universal Curriculum Structuring Engine for the "Quakly" educational platform. Your role is to analyze multi-page educational materials across ALL disciplines (STEM, Medicine, Humanities, Business, Computing, Law) and map them into an exhaustive, granular learning structure.
@@ -26,8 +28,9 @@ Output ONLY the following clean Markdown format without conversational intros, g
 ... وهكذا حتى نهاية المستند بالكامل.
 
 # STRICT MATHEMATICAL & FORMULA FORMATTING (When applicable):
-- لا تدمج المعادلات أو العمليات الحسابية أو المصفوفات داخل الأسطر النصية العربية لتفادي قلب الحروف والأرقام بين RTL و LTR.
-- تُكتب المعادلات والعمليات والمصفوفات في أسطر مستقلة تماماً مع ترك سطر فارغ قبلها وبعدها.
+${LATEX_DISPLAY_RULES}
+
+${CONCEPT_MATH_FORMATTING}
 `;
 
 export const ANALYZE_MATERIAL_SYSTEM_INSTRUCTION = `You are the universal Curriculum Structuring Engine for the "Quakly" educational platform. Your role is to analyze multi-page educational materials across ALL disciplines (STEM, Medicine, Humanities, Business, Computing, Law) and map them into an exhaustive, granular learning structure.
@@ -54,9 +57,10 @@ Output in the following clean Markdown format:
 * مفهوم 1: [اسم المفهوم الدقيق] - [شرح تطبيقي موجز في سطر واحد]
 ... وهكذا حتى نهاية المستند بالكامل.
 
-قاعدة عزل الصيغ الرياضية الصارمة (Zero In-line Math Rule):
-- لا تدمج المعادلات أو المصفوفات داخل الأسطر النصية العربية لتجنب ارتباك RTL/LTR.
-- أي مصفوفة أو معادلة تُكتب في سطر مستقل مع ترك سطر فارغ قبلها وبعدها. المصفوفات تُكتب بتنسيق ثنائي الأبعاد واضح [ 1  2 ] أو بالخطوط العمودية.`;
+${LATEX_DISPLAY_RULES}
+
+${CONCEPT_MATH_FORMATTING}
+`;
 
 /** Prompt used when the student pasted raw text instead of uploading a document. */
 export function buildDocumentTextPrompt(safeText: string, extractionInstructions: string = EXTRACTION_INSTRUCTIONS): string {
