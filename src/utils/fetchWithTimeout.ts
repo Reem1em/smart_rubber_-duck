@@ -26,6 +26,18 @@ export async function fetchWithTimeout(
       throw err;
     }
 
+    if (response.status === 503) {
+      const errData = await response.json().catch(() => ({}));
+      const msg =
+        errData.error ||
+        errData.message ||
+        'خوادم الذكاء الاصطناعي تشهد ضغطاً مؤقتاً. يرجى المحاولة مرة أخرى.';
+      const err = new Error(msg);
+      (err as any).isServerOverload = true;
+      (err as any).status = 503;
+      throw err;
+    }
+
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
       const msg = errData.message || errData.error || `HTTP ${response.status}: Failed request`;

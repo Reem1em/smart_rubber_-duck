@@ -14,3 +14,16 @@ export function isRateLimitError(err: any): boolean {
     msg.includes('حد الاستخدام')
   );
 }
+
+export function isServerOverloadError(err: any): boolean {
+  if (!err) return false;
+  if (err.isServerOverload || err.status === 503 || err.statusCode === 503) return true;
+  const msg = String(err.message || err.error || err.statusText || err || '');
+  return (
+    msg.includes('503') ||
+    msg.includes('UNAVAILABLE') ||
+    msg.includes('overloaded') ||
+    msg.includes('Service Unavailable') ||
+    msg.includes('ضغطاً مؤقتاً')
+  );
+}

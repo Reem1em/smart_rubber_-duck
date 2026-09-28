@@ -111,7 +111,7 @@ export const MathView: React.FC<MathViewProps> = ({ content, className = '', asI
   const Root = asInline ? 'span' : 'div';
 
   return (
-    <Root className={`leading-relaxed ${className} ${asInline ? 'inline' : ''}`}>
+    <Root dir="ltr" style={{ unicodeBidi: 'isolate' }} className={`leading-relaxed ${className} ${asInline ? 'inline' : ''}`}>
       {blocks.map((block, idx) => {
         if (block.type === 'matrix' && block.matrixRows) {
           return (
@@ -123,7 +123,7 @@ export const MathView: React.FC<MathViewProps> = ({ content, className = '', asI
                 {block.matrixRows.map((row, rIdx) => (
                   <div key={rIdx} className="flex items-center justify-center gap-4 sm:gap-6 py-0.5">
                     {row.map((cell, cIdx) => (
-                      <span key={cIdx} className="w-8 sm:w-10 text-center font-bold text-slate-900 dark:text-slate-100">
+                      <span key={cIdx} className="math-matrix-cell w-8 sm:w-10 text-center font-bold text-slate-900 dark:text-slate-100">
                         {cell}
                       </span>
                     ))}
@@ -159,9 +159,11 @@ export const MathView: React.FC<MathViewProps> = ({ content, className = '', asI
             return (
               <span
                 key={`latex-${idx}`}
+                dir="ltr"
+                style={{ unicodeBidi: 'isolate' }}
                 className={
                   asInline
-                    ? 'inline-block px-1 align-baseline'
+                    ? 'math-inline px-1 align-baseline'
                     : 'my-3 block text-center overflow-x-auto py-1'
                 }
                 dangerouslySetInnerHTML={{ __html: html }}
@@ -327,7 +329,9 @@ const InlineMathParser: React.FC<{ text: string }> = ({ text }) => {
       parts.push(
         <span
           key={`inline-katex-${match.index}`}
-          className="inline-block px-1 align-baseline"
+          dir="ltr"
+          style={{ unicodeBidi: 'isolate' }}
+          className="math-inline px-1 align-baseline"
           dangerouslySetInnerHTML={{ __html: html }}
         />
       );
@@ -342,5 +346,5 @@ const InlineMathParser: React.FC<{ text: string }> = ({ text }) => {
     parts.push(text.substring(lastIndex));
   }
 
-  return <span>{parts}</span>;
+  return <span dir="ltr" style={{ unicodeBidi: 'isolate' }}>{parts}</span>;
 };

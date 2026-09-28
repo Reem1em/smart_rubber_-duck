@@ -381,7 +381,7 @@ export const QuizPanel: React.FC = () => {
                     >
                       {String.fromCharCode(65 + optIdx)}
                     </span>
-                    <div className="leading-relaxed">
+                    <div className="math-option leading-relaxed">
                       <MathView content={option} asInline />
                     </div>
                   </div>

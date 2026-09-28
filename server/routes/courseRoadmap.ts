@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { ThinkingLevel } from '@google/genai';
 
-import { generateWithFallback } from '../gemini';
+import { generateWithRetry } from '../gemini';
 import { handleModelFailure } from '../routeErrors';
 import { parseModelJsonWithFences } from '../modelJson';
 import {
@@ -52,7 +52,7 @@ export const handleParseSyllabus = async (req: Request, res: Response) => {
       parts.push({ text: buildSyllabusTextPrompt(promptInput, safeText) });
     }
 
-    const response = await generateWithFallback(
+    const response = await generateWithRetry(
       {
         contents: { parts },
         config: {

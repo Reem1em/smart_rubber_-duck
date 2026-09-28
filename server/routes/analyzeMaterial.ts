@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { ThinkingLevel } from '@google/genai';
 
-import { generateWithFallback } from '../gemini';
+import { generateWithRetry, isServerOverloadError } from '../gemini';
 import { parseModelJsonWithFences } from '../modelJson';
 import { ANALYZE_MATERIAL_SYSTEM_INSTRUCTION, EXTRACTION_INSTRUCTIONS, buildDocumentTextPrompt } from '../prompts/analyzeMaterial';
 import { analyzeMaterialSchema } from '../schemas/analyzeMaterial';
@@ -36,7 +36,7 @@ export const handleAnalyzeMaterial = async (req: Request, res: Response) => {
       });
     }
 
-    const response = await generateWithFallback({
+    const response = await generateWithRetry({
       contents: { parts: contentsParts },
       config: {
         systemInstruction: ANALYZE_MATERIAL_SYSTEM_INSTRUCTION,
@@ -96,6 +96,12 @@ export const handleAnalyzeMaterial = async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     console.error('Error in analyze-material endpoint:', err?.message || err);
+    if (isServerOverloadError(err)) {
+      return res.status(503).json({
+        error: 'خوادم الذكاء الاصطناعي تشهد ضغطاً مؤقتاً. يرجى المحاولة مرة أخرى.',
+        isServerOverload: true,
+      });
+    }
     return res.status(500).json({
       error: err?.message || 'تعذر استخراج الهيكلية الأكاديمية والمفاهيم من المستند. يرجى التأكد من وضوح محتوى الملف والمحاولة مرة أخرى.'
     });

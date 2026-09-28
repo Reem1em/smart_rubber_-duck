@@ -306,7 +306,7 @@ function AppContent() {
       {/* Footer */}
       <footer className="py-4 border-t border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 text-center text-xs font-bold text-slate-600 dark:text-slate-400">
         <p>
-          منصة كواكلي (Quakly) • مدرب الرياضيات التفاعلي الذكي
+          منصة كواكلي (Quakly)
         </p>
       </footer>
     </div>

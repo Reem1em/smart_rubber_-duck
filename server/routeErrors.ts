@@ -1,6 +1,6 @@
 import type { Response } from 'express';
 
-import { isQuotaOrRateLimitError } from './gemini';
+import { isQuotaOrRateLimitError, isServerOverloadError } from './gemini';
 
 /** Pulls the transport status off a Gemini SDK error, however it was wrapped. */
 function statusOf(err: any): number | undefined {
@@ -30,6 +30,16 @@ export function handleModelFailure(
 ) {
   const status = statusOf(err);
   const detail = detailOf(err);
+
+  if (isServerOverloadError(err)) {
+    console.error(`[${context}] Gemini server overload (HTTP ${status ?? 503}): ${detail}`);
+    return res.status(503).json({
+      error:
+        'خوادم الذكاء الاصطناعي تشهد ضغطاً مؤقتاً. يرجى المحاولة مرة أخرى.',
+      isServerOverload: true,
+      detail,
+    });
+  }
 
   if (isQuotaOrRateLimitError(err)) {
     console.error(`[${context}] Gemini quota / rate limit (HTTP ${status ?? 429}): ${detail}`);

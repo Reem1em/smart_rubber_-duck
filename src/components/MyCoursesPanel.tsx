@@ -84,7 +84,7 @@ export const MyCoursesPanel: React.FC = () => {
       <div className="text-center space-y-2">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-700/60 text-amber-900 dark:text-amber-300">
           <Layers className="w-3.5 h-3.5" />
-          <span>مساحة محلية بالكامل • بدون تسجيل دخول • بدون استهلاك توكنز</span>
+          <span>مساحة محلية بالكامل</span>
         </div>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-slate-100">موادي</h2>
         <p className="text-slate-600 dark:text-slate-400 text-sm max-w-xl mx-auto leading-relaxed">

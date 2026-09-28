@@ -130,4 +130,91 @@ html.dark footer {
   color: #94a3b8 !important;
 }
 
+/* ============================================================
+   RTL / LTR MATH ISOLATION — prevents sign-flip & index-break
+   when KaTeX or plain math symbols render inside Arabic (RTL).
 
+   KEY INSIGHT: `unicode-bidi: isolate` only isolates the
+   container from surrounding text; it does NOT prevent the
+   browser BiDi algorithm from reordering characters INSIDE
+   the container. For that we need `isolate-override` on the
+   innermost KaTeX spans so every glyph is forced LTR.
+   ============================================================ */
+
+/* ---- Top-level KaTeX containers ---- */
+.katex,
+.katex-display,
+.katex-html {
+  direction: ltr !important;
+  unicode-bidi: isolate-override !important;
+  text-align: left !important;
+}
+
+.katex {
+  display: inline-block;
+}
+
+/* Standalone display-mode KaTeX blocks */
+.katex-display {
+  display: block !important;
+  text-align: center !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
+  margin: 1.5rem auto !important;
+}
+
+/* Force every nested span inside KaTeX to inherit strict LTR.
+   This is what actually prevents "-4" → "4-" and subscript reversal. */
+.katex-html *,
+.katex-mathml * {
+  direction: ltr !important;
+  unicode-bidi: plaintext !important;
+}
+
+/* ---- MathView wrapper classes ---- */
+
+/* Block-level wrapper for custom math containers (matrices, fractions) */
+.math-block {
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
+  display: block;
+  text-align: center;
+  overflow-x: auto;
+  margin: 1rem auto;
+}
+
+/* Inline KaTeX spans produced by MathView */
+.math-inline {
+  direction: ltr !important;
+  unicode-bidi: isolate-override !important;
+  display: inline-block;
+  vertical-align: baseline;
+  padding: 0 0.15em;
+}
+
+/* Quiz / practice multiple-choice option math wrapper */
+.math-option {
+  direction: ltr !important;
+  unicode-bidi: isolate-override !important;
+  display: inline-block;
+  text-align: left;
+  width: 100%;
+}
+
+/* Plain-text math variables inside Arabic sentences */
+.math-var {
+  direction: ltr !important;
+  unicode-bidi: isolate-override !important;
+  display: inline-block;
+  font-style: italic;
+}
+
+/* Visual matrix cells (pipe / bracket rows) */
+.math-matrix-cell {
+  direction: ltr !important;
+  unicode-bidi: isolate-override !important;
+  display: inline-block;
+  text-align: right;
+  min-width: 2rem;
+}

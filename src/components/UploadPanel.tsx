@@ -4,13 +4,14 @@ import { useAppState } from '../context/AppStateContext';
 import { analyzeMaterial } from '../services/ai';
 import { formatBytes } from '../utils/formatBytes';
 import { hashFile, hashContent, getCourse } from '../services/courseStore';
-import { isRateLimitError } from '../utils/rateLimit';
+import { isRateLimitError, isServerOverloadError } from '../utils/rateLimit';
 import { DuckCharacter } from './DuckCharacter';
 import {
   FileUp,
   FileText,
   AlertCircle,
   Loader2,
+  RefreshCw,
   Sparkles,
   ArrowRight,
   ArrowLeft,
@@ -40,6 +41,7 @@ export const UploadPanel: React.FC = () => {
   const [pastedText, setPastedText] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [materialHash, setMaterialHash] = useState<string | null>(null);
+  const [serverOverload, setServerOverload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = async (file: File) => {
@@ -179,6 +181,7 @@ export const UploadPanel: React.FC = () => {
     setIsAnalyzing(true);
     setDuckState('thinking');
     setError(null);
+    setServerOverload(false);
 
     try {
       const extractedConcepts = await analyzeMaterial(targetMaterial);
@@ -192,6 +195,8 @@ export const UploadPanel: React.FC = () => {
       console.error('Error starting analysis:', err);
       if (isRateLimitError(err)) {
         showRateLimitModal();
+      } else if (isServerOverloadError(err)) {
+        setServerOverload(true);
       } else {
         setError(err.message || 'تعذر استخراج المفاهيم من المستند. يرجى التأكد من وضوح محتوى الملف أو لصق النص مباشرة.');
       }
@@ -376,6 +381,30 @@ export const UploadPanel: React.FC = () => {
               className="w-full p-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-slate-800 text-sm font-sans leading-relaxed"
             />
           </div>
+        )}
+
+        {/* Server Overload Retry Banner */}
+        {serverOverload && !isAnalyzing && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700/60 flex flex-col sm:flex-row items-start sm:items-center gap-3"
+          >
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <RefreshCw className="w-5 h-5 text-amber-600 shrink-0" />
+              <p className="text-sm font-bold text-amber-900 dark:text-amber-300 leading-snug">
+                خوادم الذكاء الاصطناعي تشهد ضغطاً مؤقتاً، اضغط هنا لإعادة المحاولة
+              </p>
+            </div>
+            <button
+              id="server-overload-retry-btn"
+              onClick={handleStartAnalysis}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-black bg-amber-500 hover:bg-amber-600 text-white shadow-sm active:scale-[0.98] transition-all whitespace-nowrap cursor-pointer shrink-0"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>إعادة المحاولة</span>
+            </button>
+          </motion.div>
         )}
 
         {/* Error Alert */}

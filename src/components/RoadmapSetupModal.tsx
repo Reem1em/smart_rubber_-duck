@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   FileUp,
   Loader2,
+  RefreshCw,
   Sparkles,
   Trash2,
   Wand2,
@@ -21,7 +22,7 @@ import { buildAutoRoadmap, normalizeParsedSyllabus, startOfToday, toIsoDate } fr
 import { CourseRoadmap, SavedCourse } from '../types';
 import { formatBytes } from '../utils/formatBytes';
 import { getFutureDate, validateExamDates } from '../utils/dateValidation';
-import { isRateLimitError } from '../utils/rateLimit';
+import { isRateLimitError, isServerOverloadError } from '../utils/rateLimit';
 
 type SetupTrack = 'choose' | 'syllabus' | 'auto';
 
@@ -56,6 +57,7 @@ export const RoadmapSetupModal: React.FC<RoadmapSetupModalProps> = ({
   const [weeklyHours, setWeeklyHours] = useState(10);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [serverOverload, setServerOverload] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const todayIso = toIsoDate(startOfToday());
@@ -67,6 +69,7 @@ export const RoadmapSetupModal: React.FC<RoadmapSetupModalProps> = ({
     setTrack('choose');
     setSyllabusFile(null);
     setError(null);
+    setServerOverload(false);
     onClose();
   };
 
@@ -124,6 +127,7 @@ export const RoadmapSetupModal: React.FC<RoadmapSetupModalProps> = ({
 
     setIsBusy(true);
     setError(null);
+    setServerOverload(false);
 
     try {
       const parsed = await parseSyllabus({
@@ -152,6 +156,10 @@ export const RoadmapSetupModal: React.FC<RoadmapSetupModalProps> = ({
       if (isRateLimitError(err)) {
         showRateLimitModal();
         resetAndClose();
+        return;
+      }
+      if (isServerOverloadError(err)) {
+        setServerOverload(true);
         return;
       }
       setError(err?.message || 'تعذر تحليل توصيف المادة. حاول مرة أخرى.');
@@ -392,6 +400,30 @@ export const RoadmapSetupModal: React.FC<RoadmapSetupModalProps> = ({
                   </span>
                 </div>
               </div>
+            )}
+
+            {/* Server Overload Retry Banner */}
+            {serverOverload && !isBusy && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700/60"
+              >
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <RefreshCw className="w-4 h-4 text-amber-600 shrink-0" />
+                  <p className="text-xs font-bold text-amber-900 dark:text-amber-300 leading-snug">
+                    خوادم الذكاء الاصطناعي تشهد ضغطاً مؤقتاً، اضغط هنا لإعادة المحاولة
+                  </p>
+                </div>
+                <button
+                  id="roadmap-server-overload-retry-btn"
+                  onClick={handleParseSyllabus}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black bg-amber-500 hover:bg-amber-600 text-white shadow-sm active:scale-[0.98] transition-all whitespace-nowrap cursor-pointer shrink-0"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>إعادة المحاولة</span>
+                </button>
+              </motion.div>
             )}
 
             {error && (
