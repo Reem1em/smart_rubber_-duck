@@ -41,14 +41,16 @@ export const ConceptsPanel: React.FC = () => {
     setStep('teach');
   };
 
-  // Group concepts by chapter or unit
+  // Group concepts by chapter or unit.
+  // Concepts from multi-file chapters carry a "fileId::chapterLabel" prefix — strip it.
   const groupedConcepts = useMemo(() => {
     const groups: { [key: string]: Concept[] } = {};
     concepts.forEach((concept) => {
-      const chapter = concept.chapterOrUnit?.trim() || '[الوحدة التعليمية المستهدفة]';
-      if (!groups[chapter]) {
-        groups[chapter] = [];
-      }
+      const raw = concept.chapterOrUnit?.trim() || '[الوحدة التعليمية المستهدفة]';
+      // Strip "fileId::" prefix inserted by addFileToCourse.
+      const sep = raw.indexOf('::');
+      const chapter = sep === -1 ? raw : raw.slice(sep + 2);
+      if (!groups[chapter]) groups[chapter] = [];
       groups[chapter].push(concept);
     });
     return groups;

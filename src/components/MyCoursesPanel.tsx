@@ -1,10 +1,11 @@
 import React, { useRef, useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useAppState } from '../context/AppStateContext';
 import { courseProgress } from '../services/courseStore';
 import { formatBytes } from '../utils/formatBytes';
 import { SavedCourse } from '../types';
 import { DuckCharacter } from './DuckCharacter';
+import { CourseFilesPanel } from './CourseFilesPanel';
 import { MathView } from './MathView';
 import {
   BookOpen,
@@ -17,6 +18,9 @@ import {
   Loader2,
   CheckCircle2,
   Zap,
+  FolderOpen,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 export const MyCoursesPanel: React.FC = () => {
@@ -34,6 +38,10 @@ export const MyCoursesPanel: React.FC = () => {
   const importInputRef = useRef<HTMLInputElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
+
+  const toggleFiles = (courseId: string) =>
+    setExpandedCourseId((prev) => (prev === courseId ? null : courseId));
 
   const handleExport = async () => {
     setBusy(true);
@@ -172,8 +180,8 @@ export const MyCoursesPanel: React.FC = () => {
             const progress = courseProgress(course);
             const isActive = course.id === activeCourseId;
             return (
+              <React.Fragment key={course.id}>
               <motion.div
-                key={course.id}
                 whileHover={{ scale: 1.01, y: -2 }}
                 onClick={() => openCourse(course)}
                 className={`bg-white dark:bg-slate-900 p-5 rounded-2xl border shadow-xs hover:shadow-md transition-all cursor-pointer space-y-3 group ${
@@ -200,10 +208,16 @@ export const MyCoursesPanel: React.FC = () => {
                   </button>
                 </div>
 
+                {/* File count pill */}
                 <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
                   <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                     {course.concepts.length} مفهوماً
                   </span>
+                  {(course.files ?? []).length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                      {(course.files ?? []).length} شابتر
+                    </span>
+                  )}
                   <span
                     className={`px-2 py-0.5 rounded-full border ${
                       progress >= 100
@@ -230,16 +244,51 @@ export const MyCoursesPanel: React.FC = () => {
                   />
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                  <span className="truncate">
-                    {course.fileName} • {formatBytes(course.fileSize)}
-                  </span>
-                  <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-bold shrink-0">
-                    <Zap className="w-3 h-3" />
-                    <span>فتح فوري</span>
-                  </span>
+                {/* Action footer */}
+                <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                    <span className="truncate">
+                      {course.fileName} • {formatBytes(course.fileSize)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleFiles(course.id); }}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-lg hover:bg-amber-100 transition-colors cursor-pointer"
+                    >
+                      <FolderOpen className="w-3 h-3" />
+                      <span>ملفات الشباتر</span>
+                      {expandedCourseId === course.id
+                        ? <ChevronUp className="w-3 h-3" />
+                        : <ChevronDown className="w-3 h-3" />}
+                    </button>
+                    <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-bold">
+                      <Zap className="w-3 h-3" />
+                      <span>فتح فوري</span>
+                    </span>
+                  </div>
                 </div>
               </motion.div>
+
+              {/* Inline chapter files panel (expands below the card) */}
+              <AnimatePresence initial={false}>
+                {expandedCourseId === course.id && (
+                  <motion.div
+                    key={`files-${course.id}`}
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.25 }}
+                    className="overflow-hidden"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="bg-slate-50 dark:bg-slate-900/60 border border-t-0 border-amber-200/60 dark:border-slate-800 rounded-b-2xl px-4 py-4">
+                      <CourseFilesPanel course={course} />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              </React.Fragment>
             );
           })}
         </div>

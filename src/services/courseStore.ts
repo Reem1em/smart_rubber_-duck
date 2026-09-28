@@ -10,6 +10,7 @@ import { createStore, get, set, del, keys, getMany, UseStore } from 'idb-keyval'
 import {
   Concept,
   ConceptStatus,
+  CourseFile,
   CourseRoadmap,
   ExamMilestonePlan,
   MaterialInput,
@@ -260,6 +261,66 @@ export async function clearMilestonePlan(courseId: string): Promise<SavedCourse 
 export function courseProgress(course: SavedCourse): number {
   if (course.concepts.length === 0) return 0;
   return Math.round((course.masteredConceptIds.length / course.concepts.length) * 100);
+}
+
+/**
+ * Appends a new chapter file record to the course and merges its concepts into the
+ * aggregated pool. Concepts are tagged with `fileId` via their `chapterOrUnit` field
+ * using the pattern "[fileId]::{original chapterOrUnit}" so they can be filtered by file.
+ *
+ * If the file hash already exists in `course.files`, the call is a no-op and
+ * returns `{ duplicate: true }` so the caller can notify the student.
+ */
+export async function addFileToCourse(
+  courseId: string,
+  fileRecord: CourseFile,
+  newConcepts: Concept[]
+): Promise<{ course: SavedCourse; duplicate: boolean }> {
+  const course = await getCourse(courseId);
+  if (!course) throw new Error('المادة غير موجودة.');
+
+  const existing = (course.files ?? []).find((f) => f.id === fileRecord.id);
+  if (existing) return { course, duplicate: true };
+
+  // Tag each new concept so we know which file it came from.
+  const taggedConcepts = newConcepts.map((c) => ({
+    ...c,
+    // Preserve any existing chapterOrUnit inside the tag.
+    chapterOrUnit: `${fileRecord.id}::${c.chapterOrUnit || fileRecord.fileName}`,
+  }));
+
+  const updated = await putCourse({
+    ...course,
+    files: [...(course.files ?? []), { ...fileRecord, status: 'ready' }],
+    concepts: [...course.concepts, ...taggedConcepts],
+  });
+  return { course: updated, duplicate: false };
+}
+
+/**
+ * Removes a chapter file and all concepts sourced from it.
+ * Returns the updated course.
+ */
+export async function removeFileFromCourse(
+  courseId: string,
+  fileId: string
+): Promise<SavedCourse | undefined> {
+  const course = await getCourse(courseId);
+  if (!course) return undefined;
+
+  const prunedConcepts = course.concepts.filter(
+    (c) => !c.chapterOrUnit?.startsWith(`${fileId}::`)
+  );
+  const prunedIds = new Set(prunedConcepts.map((c) => c.id));
+
+  return putCourse({
+    ...course,
+    files: (course.files ?? []).filter((f) => f.id !== fileId),
+    concepts: prunedConcepts,
+    masteredConceptIds: course.masteredConceptIds.filter((id) => prunedIds.has(id)),
+    gapConceptIds: (course.gapConceptIds ?? []).filter((id) => prunedIds.has(id)),
+    inProgressConceptIds: (course.inProgressConceptIds ?? []).filter((id) => prunedIds.has(id)),
+  });
 }
 
 /** Strips the file extension so cards show a readable course title. */

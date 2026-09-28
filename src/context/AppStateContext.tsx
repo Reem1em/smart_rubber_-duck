@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState } from 'react';
 import {
   AppStep,
   Concept,
+  CourseFile,
   CourseRoadmap,
   ExamMilestonePlan,
   SavedCourse,
@@ -81,6 +82,14 @@ interface AppState {
   markActiveConceptInProgress: (conceptId: string) => Promise<void>;
   exportWorkspace: () => Promise<WorkspaceExport>;
   importWorkspace: (payload: unknown) => Promise<number>;
+  /** Incrementally adds a new chapter file and its concepts to the active course. */
+  addChapterToCourse: (
+    courseId: string,
+    fileRecord: CourseFile,
+    newConcepts: Concept[]
+  ) => Promise<{ duplicate: boolean }>;
+  /** Prunes a chapter file and all its concepts from the active course. */
+  removeChapterFromCourse: (courseId: string, fileId: string) => Promise<void>;
 
   /* ---- Course Roadmap (خريطة المقرر) ---- */
   /** The active course, resolved from the local workspace. */
@@ -198,6 +207,28 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await refreshCourses();
     } catch (err) {
       console.warn('تعذر حفظ المادة محلياً:', err);
+    }
+  };
+
+  const addChapterToCourse = async (
+    courseId: string,
+    fileRecord: CourseFile,
+    newConcepts: Concept[]
+  ): Promise<{ duplicate: boolean }> => {
+    const result = await courseStore.addFileToCourse(courseId, fileRecord, newConcepts);
+    await refreshCourses();
+    // Sync active concept board if this is the active course.
+    if (courseId === activeCourseId) {
+      setConcepts(result.course.concepts);
+    }
+    return { duplicate: result.duplicate };
+  };
+
+  const removeChapterFromCourse = async (courseId: string, fileId: string): Promise<void> => {
+    const updated = await courseStore.removeFileFromCourse(courseId, fileId);
+    await refreshCourses();
+    if (courseId === activeCourseId && updated) {
+      setConcepts(updated.concepts);
     }
   };
 
@@ -449,6 +480,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         markActiveConceptInProgress,
         exportWorkspace,
         importWorkspace,
+        addChapterToCourse,
+        removeChapterFromCourse,
         activeCourse,
         saveActiveRoadmap,
         resetActiveRoadmap,

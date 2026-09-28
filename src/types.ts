@@ -29,6 +29,23 @@ export interface MaterialInput {
   mimeType?: string;
 }
 
+/**
+ * A single uploaded chapter / slide-deck / supplemental file inside a multi-file course.
+ * Keyed by the SHA-256 of the file content so re-uploads are cache-hits.
+ */
+export interface CourseFile {
+  /** SHA-256 of the file content — used as both cache key and dedup guard. */
+  id: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  uploadedAt: number;
+  /** Number of concepts extracted from this specific file. */
+  conceptsCount: number;
+  /** Status of extraction for this file. */
+  status: 'processing' | 'ready' | 'error';
+}
+
 /** A course workspace cached locally in IndexedDB, keyed by content hash. */
 export interface SavedCourse {
   id: string; // SHA-256 of the source document / pasted text
@@ -51,6 +68,11 @@ export interface SavedCourse {
   activeMilestonePlan?: ExamMilestonePlan;
   /** Google `sub` of the signed-in owner; absent for guest (local-only) courses. */
   ownerId?: string;
+  /**
+   * Multi-file chapter repository. Each entry tracks one uploaded file.
+   * Absent on legacy single-file courses (treated as empty array).
+   */
+  files?: CourseFile[];
 }
 
 /** Signed-in student profile returned by POST /api/auth/google. */
