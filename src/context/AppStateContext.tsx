@@ -132,10 +132,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('rubber_duck_theme');
       if (saved === 'dark' || saved === 'light') return saved;
-      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        return 'dark';
-      }
     }
+    // Default to light mode; the toggle lets users switch to dark at any time.
     return 'light';
   });
   const [error, setError] = useState<string | null>(null);
