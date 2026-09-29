@@ -20,13 +20,15 @@ export const handleFinalDiagnosis = async (req: Request, res: Response) => {
     } = req.body;
 
     const conceptName = concept?.name || 'المفهوم المدروس';
-    const statedConfidence = diagnosis?.statedConfidence ?? 80;
-    const understandingScore = diagnosis?.understandingScore ?? 75;
-    const qScore = typeof quizScore === 'number' ? quizScore : 4;
-    const qTotal = typeof quizTotal === 'number' && quizTotal > 0 ? quizTotal : 5;
-    const quizPercentage = Math.round((qScore / qTotal) * 100);
+    // Missing signals stay null so the model is never fed invented scores.
+    const numOrNull = (v: unknown) => (typeof v === 'number' ? v : null);
+    const statedConfidence = numOrNull(diagnosis?.statedConfidence);
+    const understandingScore = numOrNull(diagnosis?.understandingScore);
+    const quiz = typeof quizScore === 'number' && typeof quizTotal === 'number' && quizTotal > 0
+      ? { score: quizScore, total: quizTotal }
+      : null;
 
-    const prompt = buildFinalDiagnosisPrompt({ conceptName, statedConfidence, understandingScore, diagnosis, socraticAnswer, transferAnswer, qScore, qTotal, quizPercentage });
+    const prompt = buildFinalDiagnosisPrompt({ conceptName, statedConfidence, understandingScore, diagnosis, socraticAnswer, transferAnswer, quiz });
 
     const response = await generateInteractive({
       contents: prompt,
@@ -38,6 +40,9 @@ export const handleFinalDiagnosis = async (req: Request, res: Response) => {
 
     const parsed = parseModelJson(response.text);
     if (typeof parsed.masteryScore === 'number' && parsed.detailedAnalysis) {
+      // The schema forces numbers, so pin the initial metrics to what was actually measured.
+      parsed.detailedAnalysis.initialConfidence = statedConfidence;
+      parsed.detailedAnalysis.initialUnderstanding = understandingScore;
       return res.json(parsed);
     }
     throw new Error('Invalid final diagnosis response structure');

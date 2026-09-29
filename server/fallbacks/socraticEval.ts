@@ -6,7 +6,7 @@ export function socraticEvalFallback(body: any) {
   const name = body?.concept?.name || 'المفهوم';
 
   return {
-    reasoningQualityScore: 50,
+    reasoningQualityScore: null,
     improvedUnderstanding: false,
     duckReaction: 'كواك! السيرفرات زحمة فما قدرت أقيّم إجابتك بدقة — بس لا تشيل هم، إجابتك محفوظة. خلنا نكمل بتحدي تطبيقي.',
     transferChallenge: {

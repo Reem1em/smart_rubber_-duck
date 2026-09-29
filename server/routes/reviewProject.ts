@@ -27,6 +27,6 @@ export const handleReviewProject = async (req: Request, res: Response) => {
     }
     throw new Error('Invalid project review response structure');
   } catch (err: any) {
-    return handleModelFailure(res, 'review-project', err, () => projectReviewFallback(req.body));
+    return handleModelFailure(res, 'review-project', err, () => projectReviewFallback());
   }
 };

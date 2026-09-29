@@ -1,7 +1,6 @@
 /**
- * Served when every model attempt fails. It deliberately makes no claim about the
- * student's understanding (score mirrors stated confidence, no invented flaws) and
- * falls back to a concept-agnostic Strategy Think-Aloud prompt.
+ * Served when every model attempt fails. Unrated: understanding, gap and flaws are left
+ * empty rather than invented, and the session continues to a concept-agnostic Strategy Think-Aloud prompt.
  */
 export function diagnoseFallback(body: any) {
   const conf = typeof body?.confidenceLevel === 'number' ? body.confidenceLevel : 80;
@@ -10,9 +9,9 @@ export function diagnoseFallback(body: any) {
 
   return {
     statedConfidence: conf,
-    understandingScore: conf,
-    gapScore: 0,
-    gapType: 'calibrated',
+    understandingScore: null,
+    gapScore: null,
+    gapType: null,
     gapDescription: 'كواك! السيرفرات زحمة شوي فما قدرت أحلل شرحك بالتفصيل — شرحك محفوظ، وخلنا نكمل بسؤال تفكير.',
     identifiedFlaws: [],
     strengths: [],

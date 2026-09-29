@@ -160,7 +160,7 @@ export const CodeLabPanel: React.FC = () => {
         studentExplanation,
       });
       setEvaluation(res);
-      setDuckState(res.score >= 80 ? 'proud' : 'encouraging');
+      setDuckState(res.score !== null && res.score >= 80 ? 'proud' : 'encouraging');
     } catch (err: any) {
       console.error('Error evaluating submission:', err);
       if (isRateLimitError(err)) showRateLimitModal();
@@ -385,7 +385,7 @@ export const CodeLabPanel: React.FC = () => {
       {/* Duck companion */}
       <div className="flex justify-center">
         <DuckCharacter
-          state={isGenerating || isEvaluating ? 'thinking' : evaluation ? (evaluation.score >= 80 ? 'proud' : 'encouraging') : isCustomLab && customEvaluation ? (customEvaluation.allPassed ? 'proud' : 'encouraging') : challenge ? 'quizzical' : 'idle'}
+          state={isGenerating || isEvaluating ? 'thinking' : evaluation ? (evaluation.score !== null && evaluation.score >= 80 ? 'proud' : 'encouraging') : isCustomLab && customEvaluation ? (customEvaluation.allPassed ? 'proud' : 'encouraging') : challenge ? 'quizzical' : 'idle'}
           message={duckMessage}
         />
       </div>
@@ -750,16 +750,22 @@ export const CodeLabPanel: React.FC = () => {
               <Award className="w-5 h-5 text-amber-600" />
               <h3 className="text-lg font-black text-slate-900 dark:text-slate-100">تقييم كواكلي</h3>
             </div>
-            <div className="flex items-center gap-2">
-              <span
-                className={`px-2.5 py-1 rounded-full text-xs font-extrabold border ${
-                  MASTERY_BADGE[evaluation.mastery]?.className || MASTERY_BADGE.competent.className
-                }`}
-              >
-                {MASTERY_BADGE[evaluation.mastery]?.label || evaluation.mastery}
+            {evaluation.score === null || !evaluation.mastery ? (
+              <span className="px-2.5 py-1 rounded-full text-xs font-extrabold border bg-slate-100 text-slate-700 border-slate-300">
+                غير مقيَّم
               </span>
-              <span className="text-2xl font-black text-amber-600">{evaluation.score}%</span>
-            </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span
+                  className={`px-2.5 py-1 rounded-full text-xs font-extrabold border ${
+                    MASTERY_BADGE[evaluation.mastery]?.className || MASTERY_BADGE.competent.className
+                  }`}
+                >
+                  {MASTERY_BADGE[evaluation.mastery]?.label || evaluation.mastery}
+                </span>
+                <span className="text-2xl font-black text-amber-600">{evaluation.score}%</span>
+              </div>
+            )}
           </div>
 
           <p className="text-sm font-bold text-slate-800 dark:text-slate-200 bg-amber-50/80 dark:bg-slate-800/60 p-3.5 rounded-xl border border-amber-200/70 dark:border-slate-700 leading-relaxed">

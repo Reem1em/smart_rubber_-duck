@@ -87,8 +87,14 @@ export const SocraticQuestionPanel: React.FC = () => {
     }
   };
 
-  const getGapBadge = (type: string) => {
+  const getGapBadge = (type: string | null) => {
     switch (type) {
+      case null:
+        return {
+          label: 'لم يُقيَّم — السيرفرات مزدحمة',
+          color: 'bg-slate-100 text-slate-700 border-slate-300',
+          icon: Scale,
+        };
       case 'overconfident':
         return {
           label: 'إفراط في الثقة (وهم الاستيعاب العميق)',
@@ -126,7 +132,11 @@ export const SocraticQuestionPanel: React.FC = () => {
               ? 'surprised'
               : 'quizzical'
           }
-          message={`اكتشفتُ ثغرة الفهم في بيانك! أجبني عن السؤَال الموجه إليك في الأسفل.`}
+          message={
+            diagnosis.understandingScore === null
+              ? diagnosis.gapDescription
+              : `اكتشفتُ ثغرة الفهم في بيانك! أجبني عن السؤَال الموجه إليك في الأسفل.`
+          }
         />
       </div>
 
@@ -159,11 +169,13 @@ export const SocraticQuestionPanel: React.FC = () => {
 
           <div className="space-y-1">
             <p className="text-xs font-bold text-slate-500 uppercase">درجة الفهم الحقيقية</p>
-            <p className="text-2xl font-black text-blue-600">{diagnosis.understandingScore}%</p>
+            <p className="text-2xl font-black text-blue-600">
+              {diagnosis.understandingScore === null ? 'غير مقيَّم' : `${diagnosis.understandingScore}%`}
+            </p>
             <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
               <div
                 className="bg-blue-500 h-full rounded-full transition-all duration-500"
-                style={{ width: `${diagnosis.understandingScore}%` }}
+                style={{ width: `${diagnosis.understandingScore ?? 0}%` }}
               />
             </div>
           </div>

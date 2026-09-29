@@ -58,17 +58,13 @@ $$\\det(A) = (1 \\times 3) + (4 \\times 2) = 11$$
   };
 }
 
-/** Static payload served when every model in the chain fails. */
+/** Unrated: no score or invented bug findings for a submission the judge never saw. */
 export function bugEvaluationFallback() {
   return {
-    score: 95,
-    summary: 'صيد ممتاز ودقيق! اكتشفت الخطأ في إشارة العملية وعرفتها: طرح حاصل ضرب القطرين وليس جمعهما.',
-    identifiedBugs: [
-      'اكتشاف خطأ جمع القطرين بدلاً من طرحهما: (ad - bc) وليس (ad + bc).',
-    ],
+    score: null,
+    summary: 'كواك! السيرفرات زحمة فما قدرت أقيّم صيدك الحين — إجابتك محفوظة، جرّب مرة ثانية بعد شوي.',
+    identifiedBugs: [],
     missedBugs: [],
-    correctedCode: `المحدد الصحيح للمصفوفة A:
-
-$$\\det(A) = (1 \\times 3) - (4 \\times 2) = 3 - 8 = -5$$`,
+    correctedCode: '',
   };
 }

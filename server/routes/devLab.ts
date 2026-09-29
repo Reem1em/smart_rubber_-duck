@@ -82,7 +82,7 @@ export const handleEvaluateDevSubmission = async (req: Request, res: Response) =
 
     return res.json(parsed);
   } catch (err: any) {
-    return handleModelFailure(res, 'dev-lab', err, () => devEvaluationFallback(req.body));
+    return handleModelFailure(res, 'dev-lab', err, () => devEvaluationFallback());
   }
 };
 

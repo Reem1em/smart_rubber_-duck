@@ -150,33 +150,38 @@ export const QuizPanel: React.FC = () => {
             showRateLimitModal();
           }
           setError('حدث خطأ أثناء إعداد التقرير النهائي، تم استخدام التقرير التلقائي للنتيجة.');
-          const scorePercent = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 70;
+          // Report built from the client-graded quiz only; unrated when there was no quiz.
+          const scorePercent = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : null;
           setFinalDiagnosis({
             masteryScore: scorePercent,
-            gapResolved: scorePercent >= 60,
-            duckVerdict: scorePercent >= 60 ? 'كواك! أحسنت أداء الاختبار القصير وتجاوزت الفجوة بنجاح!' : 'أحرزت تقدوماً، ونوصي بمراجعة المفاهيم لاستكمال الفهم.',
-            duckMood: scorePercent >= 60 ? 'proud' : 'encouraging',
+            gapResolved: scorePercent !== null && scorePercent >= 60,
+            duckVerdict: scorePercent === null
+              ? 'كواك! ما قدرت أجهّز التقرير الحين — جرّب مرة ثانية بعد شوي.'
+              : `كواك! هذا التقرير مبني على نتيجة اختبارك القصير فقط (${scorePercent}%).`,
+            duckMood: scorePercent !== null && scorePercent >= 60 ? 'proud' : 'encouraging',
             detailedAnalysis: {
               initialConfidence: diagnosis.statedConfidence,
               initialUnderstanding: diagnosis.understandingScore,
               finalMastery: scorePercent,
-              keyLearnings: [selectedConcept.name],
-              remainingGaps: scorePercent < 100 ? ['مراجعة الأسئلة غير الدقيقة في الاختبار'] : [],
+              keyLearnings: [],
+              remainingGaps: [],
             },
           });
         }
       } else {
-        const scorePercent = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 100;
+        const scorePercent = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : null;
         setFinalDiagnosis({
           masteryScore: scorePercent,
-          gapResolved: true,
-          duckVerdict: 'أحسنت في إنهاء الاختبار والقراءة البليغة للمفهوم!',
-          duckMood: 'proud',
+          gapResolved: scorePercent !== null && scorePercent >= 60,
+          duckVerdict: scorePercent === null
+            ? 'أحسنت في إنهاء الجلسة!'
+            : `أحسنت في إنهاء الاختبار — نتيجتك ${scorePercent}%.`,
+          duckMood: scorePercent !== null && scorePercent >= 60 ? 'proud' : 'encouraging',
           detailedAnalysis: {
-            initialConfidence: 80,
-            initialUnderstanding: 80,
+            initialConfidence: diagnosis?.statedConfidence ?? null,
+            initialUnderstanding: diagnosis?.understandingScore ?? null,
             finalMastery: scorePercent,
-            keyLearnings: selectedConcept ? [selectedConcept.name] : ['المفاهيم المحورية'],
+            keyLearnings: [],
             remainingGaps: [],
           },
         });

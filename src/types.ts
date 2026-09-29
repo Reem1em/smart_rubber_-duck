@@ -101,9 +101,10 @@ export interface WorkspaceExport {
 
 export interface DiagnosisResult {
   statedConfidence: number; // 0 - 100
-  understandingScore: number; // 0 - 100
-  gapScore: number; // Difference
-  gapType: ConfidenceGapType;
+  /** `null` = unrated: grading was skipped because the evaluator was unavailable. */
+  understandingScore: number | null; // 0 - 100
+  gapScore: number | null; // Difference
+  gapType: ConfidenceGapType | null;
   gapDescription: string;
   identifiedFlaws: string[];
   strengths: string[];
@@ -113,7 +114,7 @@ export interface DiagnosisResult {
 
 export interface SocraticEvaluation {
   socraticAnswer: string;
-  reasoningQualityScore: number; // 0 - 100
+  reasoningQualityScore: number | null; // 0 - 100, null = unrated
   improvedUnderstanding: boolean;
   duckReaction: string;
 }
@@ -125,14 +126,14 @@ export interface TransferChallenge {
 }
 
 export interface FinalDiagnosisResult {
-  masteryScore: number; // 0 - 100
+  masteryScore: number | null; // 0 - 100, null = unrated
   gapResolved: boolean;
   duckVerdict: string;
   duckMood: DuckState;
   detailedAnalysis: {
     initialConfidence: number;
-    initialUnderstanding: number;
-    finalMastery: number;
+    initialUnderstanding: number | null;
+    finalMastery: number | null;
     keyLearnings: string[];
     remainingGaps: string[];
   };
@@ -284,7 +285,7 @@ export interface ParsedSyllabus {
 }
 
 export interface ProjectReviewResponse {
-  score: number; // 0-100
+  score: number | null; // 0-100, null = unrated
   summary: string;
   strengths: string[];
   gaps: string[];
@@ -353,14 +354,15 @@ export interface DevChallenge {
 }
 
 export interface DevEvaluation {
-  score: number;
+  /** `null` = unrated: grading was skipped because the evaluator was unavailable. */
+  score: number | null;
   verdict: string;
   whatWorked: string[];
   flaws: string[];
   edgeCaseResilience: string[];
   codeQuality: string[];
   improvedCode: string;
-  mastery: DevMastery;
+  mastery: DevMastery | null;
 }
 
 export interface BugChallenge {
@@ -378,7 +380,7 @@ export interface BugChallengeResponse {
 }
 
 export interface BugEvaluationResponse {
-  score: number;
+  score: number | null; // null = unrated
   summary: string;
   identifiedBugs: string[];
   missedBugs: string[];

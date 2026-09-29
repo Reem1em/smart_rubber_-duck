@@ -70,30 +70,17 @@ def top_students(scores, threshold):
   };
 }
 
-export function devEvaluationFallback(body: any) {
-  const hasCode = typeof body?.studentCode === 'string' && body.studentCode.trim().length > 20;
-
+/** Unrated: no score, mastery or invented feedback for code the judge never saw. */
+export function devEvaluationFallback() {
   return {
-    score: hasCode ? 78 : 35,
-    verdict: hasCode
-      ? 'كواك! شغل نظيف — المنطق الأساسي صحيح وواضح. باقي لك الحالات الحدية وبتكون ممتازة.'
-      : 'كواك! ما وصلني كود كافٍ أقيّمه. اكتب محاولتك ولو ناقصة، وأنا أمشي معك خطوة خطوة.',
-    whatWorked: hasCode
-      ? ['المنطق الأساسي للحل صحيح ويعطي النتيجة المتوقعة في الحالة الاعتيادية.', 'تسمية المتغيرات واضحة وسهلة القراءة.']
-      : [],
-    flaws: hasCode
-      ? ['لم يتم التحقق من المدخلات الفارغة قبل استخدامها، مما قد يسبب انهياراً وقت التشغيل.']
-      : ['لا يوجد كود مُسلَّم لتقييمه.'],
-    edgeCaseResilience: hasCode
-      ? ['المدخل الفارغ: غير معالج.', 'القيم الحدية: معالجة جزئياً.']
-      : ['لم يتم تقييم الحالات الحدية لغياب الكود.'],
-    codeQuality: hasCode
-      ? ['أضف تعليقاً موجزاً يشرح الغرض من الدالة.', 'افصل التحقق من المدخلات عن منطق الحساب.']
-      : ['ابدأ بهيكل دالة بسيط ثم طوّره تدريجياً.'],
-    improvedCode: hasCode
-      ? '// أضف تحققاً من المدخلات في بداية الدالة قبل أي عملية حسابية،\n// ثم أعد الحساب على البيانات بعد التأكد من صلاحيتها.'
-      : '// اكتب محاولتك الأولى هنا، ولو كانت ناقصة.',
-    mastery: hasCode ? 'competent' : 'needs-work',
+    score: null,
+    verdict: 'كواك! السيرفرات زحمة فما قدرت أقيّم حلك الحين — كودك محفوظ، جرّب "تحقق" مرة ثانية بعد شوي.',
+    whatWorked: [],
+    flaws: [],
+    edgeCaseResilience: [],
+    codeQuality: [],
+    improvedCode: '',
+    mastery: null,
   };
 }
 

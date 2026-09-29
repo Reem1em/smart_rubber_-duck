@@ -28,27 +28,30 @@ export const FinalDiagnosisPanel: React.FC = () => {
     markActiveConceptGap,
   } = useAppState();
 
-  const masteryScore = finalDiagnosis?.masteryScore ?? 0;
+  // null = unrated (evaluator unavailable and no quiz signal) — never counts toward mastery.
+  const masteryScore = finalDiagnosis?.masteryScore ?? null;
   const conceptId = selectedConcept?.id;
-  const hasVerdict = Boolean(finalDiagnosis);
 
   // Drives both the "موادي" progress badge and the mastery badge in "خريطة المقرر":
   // a resolved concept turns 🟢 متقن, an unresolved one is flagged 🔴 ثغرة مرصودة and
   // lands in the weekend consolidation bucket.
   React.useEffect(() => {
-    if (!conceptId || !hasVerdict) return;
+    if (!conceptId || masteryScore === null) return;
     if (masteryScore >= 70) {
       void markActiveConceptMastered(conceptId);
     } else {
       void markActiveConceptGap(conceptId);
     }
-  }, [conceptId, hasVerdict, masteryScore, markActiveConceptMastered, markActiveConceptGap]);
+  }, [conceptId, masteryScore, markActiveConceptMastered, markActiveConceptGap]);
 
   if (!finalDiagnosis || !selectedConcept || !diagnosis) return null;
 
   const { gapResolved, duckVerdict, duckMood, detailedAnalysis } = finalDiagnosis;
 
-  const getScoreColor = (score: number) => {
+  const pct = (v: number | null | undefined) => (typeof v === 'number' ? `${v}%` : 'غير مقيَّم');
+
+  const getScoreColor = (score: number | null) => {
+    if (score === null) return 'text-slate-600 border-slate-300 bg-slate-50';
     if (score >= 80) return 'text-emerald-700 border-emerald-300 bg-emerald-50';
     if (score >= 60) return 'text-amber-700 border-amber-300 bg-amber-50';
     return 'text-rose-700 border-rose-300 bg-rose-50';
@@ -59,7 +62,7 @@ export const FinalDiagnosisPanel: React.FC = () => {
       {/* Central Duck */}
       <div className="flex justify-center py-1">
         <DuckCharacter
-          state={duckMood || (masteryScore >= 75 ? 'proud' : 'encouraging')}
+          state={duckMood || (masteryScore !== null && masteryScore >= 75 ? 'proud' : 'encouraging')}
           size="lg"
           message={duckVerdict}
         />
@@ -81,14 +84,18 @@ export const FinalDiagnosisPanel: React.FC = () => {
           <div className="flex flex-col items-center">
             <span className="text-xs font-bold text-slate-500 uppercase">درجة الإتقان النهائي للمفهوم</span>
             <span className={`text-4xl sm:text-5xl font-black px-6 py-2 rounded-2xl border mt-1 ${getScoreColor(masteryScore)}`}>
-              {masteryScore}%
+              {pct(masteryScore)}
             </span>
           </div>
 
           <div className="flex flex-col items-center sm:items-start space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-slate-500 uppercase">سد فجوة اليقين والثقة:</span>
-              {gapResolved ? (
+              {masteryScore === null ? (
+                <span className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-300">
+                  <span>غير مقيَّم</span>
+                </span>
+              ) : gapResolved ? (
                 <span className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>تم سد الفجوة بنجاح</span>
@@ -102,7 +109,9 @@ export const FinalDiagnosisPanel: React.FC = () => {
             </div>
 
             <p className="text-xs text-slate-600 max-w-xs text-center sm:text-right leading-relaxed font-bold">
-              {gapResolved
+              {masteryScore === null
+                ? 'تعذر التقييم هذه المرة — أعد الجلسة لاحقاً للحصول على تقرير كامل.'
+                : gapResolved
                 ? 'استطعت بتوفيق الله إدراك ثغرتك المبدئية وتطبيق المفهوم بسداد ودقة.'
                 : 'أحرزت تقدوماً طيباً، ونوصيك بمراجعة التوصيات في الأسفل لترسيخ اليقين.'}
             </p>
@@ -114,13 +123,13 @@ export const FinalDiagnosisPanel: React.FC = () => {
           <div>
             <p className="text-slate-500 font-bold">الثقة المصرح بها</p>
             <p className="text-base font-black text-amber-600 mt-0.5">
-              {detailedAnalysis?.initialConfidence ?? diagnosis.statedConfidence}%
+              {pct(detailedAnalysis?.initialConfidence ?? diagnosis.statedConfidence)}
             </p>
           </div>
           <div>
             <p className="text-slate-500 font-bold">الفهم المبدئي</p>
             <p className="text-base font-black text-blue-600 mt-0.5">
-              {detailedAnalysis?.initialUnderstanding ?? diagnosis.understandingScore}%
+              {pct(detailedAnalysis?.initialUnderstanding ?? diagnosis.understandingScore)}
             </p>
           </div>
           <div>
@@ -132,7 +141,7 @@ export const FinalDiagnosisPanel: React.FC = () => {
           <div>
             <p className="text-slate-500 font-bold">الإتقان النهائي</p>
             <p className="text-base font-black text-emerald-600 mt-0.5">
-              {detailedAnalysis?.finalMastery ?? masteryScore}%
+              {pct(detailedAnalysis?.finalMastery ?? masteryScore)}
             </p>
           </div>
         </div>
