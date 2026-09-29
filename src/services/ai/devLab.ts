@@ -1,4 +1,4 @@
-import { DevChallenge, DevEvaluation, DevLabMode } from '../../types';
+import { CustomLabEvaluation, CustomLabTestCase, DevChallenge, DevEvaluation, DevLabMode } from '../../types';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 async function postJson<T>(url: string, data: unknown, fallbackError: string): Promise<T> {
@@ -35,4 +35,15 @@ export function evaluateDevSubmission(data: {
   studentExplanation?: string;
 }): Promise<DevEvaluation> {
   return postJson<DevEvaluation>('/api/code-lab/evaluate', data, 'فشل في تقييم الحل البرمجي.');
+}
+
+/** Evaluates student code against a custom lab assignment with user-defined test cases. */
+export function evaluateCustomLab(data: {
+  taskPrompt: string;
+  language: string;
+  testCases: CustomLabTestCase[];
+  constraints: string;
+  studentCode: string;
+}): Promise<CustomLabEvaluation> {
+  return postJson<CustomLabEvaluation>('/api/code-lab/custom-evaluate', data, 'فشل في تقييم حل المسألة المخصصة.');
 }

@@ -49,3 +49,34 @@ export const devEvaluationSchema = {
   },
   required: ['score', 'verdict', 'whatWorked', 'flaws', 'edgeCaseResilience', 'codeQuality', 'improvedCode', 'mastery'],
 };
+
+export const customLabEvaluationSchema = {
+  type: Type.OBJECT,
+  properties: {
+    testResults: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          testIndex: { type: Type.NUMBER, description: 'فهرس حالة الاختبار (يبدأ من 0)' },
+          input: { type: Type.STRING, description: 'المدخلات المستخدمة' },
+          expectedOutput: { type: Type.STRING, description: 'المخرج المتوقع' },
+          actualOutput: { type: Type.STRING, description: 'المخرج الفعلي الذي ينتجه كود الطالب' },
+          passed: { type: Type.BOOLEAN, description: 'هل تطابق المخرج الفعلي مع المتوقع' },
+        },
+        required: ['testIndex', 'input', 'expectedOutput', 'actualOutput', 'passed'],
+      },
+      description: 'نتائج كل حالة اختبار',
+    },
+    allPassed: { type: Type.BOOLEAN, description: 'هل نجحت جميع حالات الاختبار' },
+    rootCauseAnalysis: { type: Type.STRING, description: 'تحليل جذر المشكلة إن وُجد خطأ' },
+    constraintNotes: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
+      description: 'ملاحظات حول القيود الخاصة',
+    },
+    hint: { type: Type.STRING, description: 'تلميح مشجع بلهجة كواكلي السعودية' },
+    edgeCaseChallenge: { type: Type.STRING, description: 'تحدي حالة حدية إضافي عند النجاح' },
+  },
+  required: ['testResults', 'allPassed', 'rootCauseAnalysis', 'constraintNotes', 'hint', 'edgeCaseChallenge'],
+};

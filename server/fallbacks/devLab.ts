@@ -1,4 +1,4 @@
-import type { DevLabMode } from '../prompts/devLab';
+import type { CustomLabTestCase, DevLabMode } from '../prompts/devLab';
 
 /** Static payloads served when every model in the chain fails. */
 export function devChallengeFallback(body: any) {
@@ -94,5 +94,24 @@ export function devEvaluationFallback(body: any) {
       ? '// أضف تحققاً من المدخلات في بداية الدالة قبل أي عملية حسابية،\n// ثم أعد الحساب على البيانات بعد التأكد من صلاحيتها.'
       : '// اكتب محاولتك الأولى هنا، ولو كانت ناقصة.',
     mastery: hasCode ? 'competent' : 'needs-work',
+  };
+}
+
+/** Marks every case unverified rather than failed — the judge never saw the code. */
+export function customLabEvaluationFallback(testCases: CustomLabTestCase[]) {
+  return {
+    testResults: testCases.map((tc, i) => ({
+      testIndex: i,
+      input: tc.input,
+      expectedOutput: tc.expectedOutput,
+      actualOutput: '(تعذر التحقق)',
+      passed: false,
+    })),
+    allPassed: false,
+    unverified: true,
+    rootCauseAnalysis: '',
+    constraintNotes: [],
+    hint: 'كواك! الحكم الآلي مشغول الحين — جرّب كودك يدوياً على حالات الاختبار وأعد المحاولة بعد شوي.',
+    edgeCaseChallenge: '',
   };
 }

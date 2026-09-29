@@ -12,7 +12,7 @@ import { handleCourseChat } from './courseChat';
 import { handleGenerateCodeLab } from './codeLab';
 import { handleGenerateBugChallenge, handleEvaluateBugChallenge } from './bugHunting';
 import { handleReviewProject } from './reviewProject';
-import { handleGenerateDevChallenge, handleEvaluateDevSubmission } from './devLab';
+import { handleGenerateDevChallenge, handleEvaluateDevSubmission, handleEvaluateCustomLab } from './devLab';
 import { handleAuthConfig, handleAuthMe, handleDevAuth, handleGoogleAuth, handleLogout } from './auth';
 import { quotaGuard } from '../auth/quota';
 
@@ -72,6 +72,7 @@ export function registerRoutes(app: Express): void {
   // 12. UNIFIED CODE LAB: dual-mode challenge generator + submission evaluator
   app.post('/api/code-lab/challenge', quotaGuard, handleGenerateDevChallenge);
   app.post('/api/code-lab/evaluate', quotaGuard, handleEvaluateDevSubmission);
+  app.post('/api/code-lab/custom-evaluate', quotaGuard, handleEvaluateCustomLab);
 
   // 13. TASK 2: Practical Project Lab & Code Reviewer
   app.post('/api/review-project', quotaGuard, handleReviewProject);

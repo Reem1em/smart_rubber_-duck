@@ -306,9 +306,35 @@ export interface CodeLabResponse {
 
 /* ---- Unified Code Lab (معمل البرمجة) dual-mode workspace ---- */
 
-export type DevLabMode = 'builder' | 'bugHunter';
+export type DevLabMode = 'builder' | 'bugHunter' | 'customLab';
 export type DevLabLevel = 'Beginner' | 'Intermediate' | 'Advanced';
 export type DevMastery = 'needs-work' | 'competent' | 'mastered';
+
+/* ---- Custom Lab Assignment (مسألة من الملزمة / كود مخصص) ---- */
+
+export interface CustomLabTestCase {
+  input: string;
+  expectedOutput: string;
+}
+
+export interface CustomLabTestResult {
+  testIndex: number;
+  input: string;
+  expectedOutput: string;
+  actualOutput: string;
+  passed: boolean;
+}
+
+export interface CustomLabEvaluation {
+  testResults: CustomLabTestResult[];
+  allPassed: boolean;
+  /** Set when the judge was unreachable and the server served its static fallback. */
+  unverified?: boolean;
+  rootCauseAnalysis: string;
+  constraintNotes: string[];
+  hint: string;
+  edgeCaseChallenge: string;
+}
 
 export interface DevChallenge {
   mode: DevLabMode;

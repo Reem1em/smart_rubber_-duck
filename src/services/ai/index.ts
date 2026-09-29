@@ -10,5 +10,5 @@ export { parseSyllabus } from './courseRoadmap';
 export { askCourseChat } from './courseChat';
 export { reviewProject } from './reviewProject';
 export { generateCodeLab } from './codeLab';
-export { generateDevChallenge, evaluateDevSubmission } from './devLab';
+export { generateDevChallenge, evaluateDevSubmission, evaluateCustomLab } from './devLab';
 export { generateBugChallenge, evaluateBugChallenge } from './bugLab';
