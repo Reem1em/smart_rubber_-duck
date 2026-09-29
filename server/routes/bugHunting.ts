@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 
-import { generateWithFallback } from '../gemini';
+import { generateInteractive } from '../gemini';
 import { handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildBugChallengePrompt, buildBugEvaluationPrompt } from '../prompts/bugHunting';
@@ -18,7 +18,7 @@ export const handleGenerateBugChallenge = async (req: Request, res: Response) =>
 
     const prompt = buildBugChallengePrompt({ isMath, lang, diff });
 
-    const response = await generateWithFallback({
+    const response = await generateInteractive({
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -47,7 +47,7 @@ export const handleEvaluateBugChallenge = async (req: Request, res: Response) =>
       isMath: isStemTopic(language, expectedBehavior, buggyCode),
     });
 
-    const response = await generateWithFallback({
+    const response = await generateInteractive({
       contents: prompt,
       config: {
         responseMimeType: 'application/json',

@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 
-import { generateWithFallback } from '../gemini';
+import { generateInteractive } from '../gemini';
 import { handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildSocraticEvalPrompt } from '../prompts/socraticEval';
@@ -16,7 +16,7 @@ export const handleSocraticEval = async (req: Request, res: Response) => {
 
     const prompt = buildSocraticEvalPrompt({ concept, initialExplanation, socraticQuestion, socraticAnswer, isStem });
 
-    const response = await generateWithFallback({
+    const response = await generateInteractive({
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -27,6 +27,6 @@ export const handleSocraticEval = async (req: Request, res: Response) => {
     const parsed = parseModelJson(response.text);
     return res.json(parsed);
   } catch (err: any) {
-    return handleModelFailure(res, 'socratic-eval', err, () => socraticEvalFallback());
+    return handleModelFailure(res, 'socratic-eval', err, () => socraticEvalFallback(req.body));
   }
 };

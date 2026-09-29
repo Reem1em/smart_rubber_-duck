@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 
-import { generateWithFallback } from '../gemini';
+import { generateInteractive } from '../gemini';
 import { handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildFinalDiagnosisPrompt } from '../prompts/finalDiagnosis';
@@ -28,7 +28,7 @@ export const handleFinalDiagnosis = async (req: Request, res: Response) => {
 
     const prompt = buildFinalDiagnosisPrompt({ conceptName, statedConfidence, understandingScore, diagnosis, socraticAnswer, transferAnswer, qScore, qTotal, quizPercentage });
 
-    const response = await generateWithFallback({
+    const response = await generateInteractive({
       contents: prompt,
       config: {
         responseMimeType: 'application/json',

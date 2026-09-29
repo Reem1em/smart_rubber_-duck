@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 
-import { generateWithFallback } from '../gemini';
+import { generateInteractive } from '../gemini';
 import { handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildQuizPrompt } from '../prompts/generateQuiz';
@@ -21,7 +21,7 @@ export const handleGenerateQuiz = async (req: Request, res: Response) => {
 
     const prompt = buildQuizPrompt({ conceptName, conceptSummary, principlesText, materialContext, studentExplanation, transferAnswer, isStem });
 
-    const response = await generateWithFallback({
+    const response = await generateInteractive({
       contents: prompt,
       config: {
         responseMimeType: 'application/json',

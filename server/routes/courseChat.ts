@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 
-import { generateWithFallback } from '../gemini';
+import { generateInteractive } from '../gemini';
 import { handleModelFailure } from '../routeErrors';
 import {
   COURSE_CHAT_SYSTEM_INSTRUCTION,
@@ -40,7 +40,7 @@ export const handleCourseChat = async (req: Request, res: Response) => {
       message,
     });
 
-    const response = await generateWithFallback({
+    const response = await generateInteractive({
       contents: prompt,
       config: {
         systemInstruction: COURSE_CHAT_SYSTEM_INSTRUCTION,

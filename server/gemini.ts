@@ -2,9 +2,18 @@ import { GoogleGenAI } from '@google/genai';
 
 import { recordModelUsage } from './auth/quota';
 
-/** Tried in order; each model falls through to the next on error, quota or timeout. */
-const MODEL_CHAIN = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+/**
+ * Tiered model routing.
+ * - HEAVY: one-off, cached curriculum work (material analysis, syllabus parsing).
+ * - INTERACTIVE: every real-time call (challenges, chat, answer evaluation) — the
+ *   lightweight, high-availability models, so heavy traffic spikes don't block students.
+ */
+const HEAVY_MODEL_CHAIN = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+const INTERACTIVE_MODEL_CHAIN = ['gemini-3.1-flash-lite', 'gemini-flash-latest'];
 const DEFAULT_TIMEOUT_MS = 40000;
+const INTERACTIVE_TIMEOUT_MS = 20000;
+/** Silent retry schedule for interactive calls: 3 attempts, waiting 1.5s then 3s. */
+const INTERACTIVE_BACKOFF_MS = [1500, 3000];
 
 let client: GoogleGenAI | null = null;
 
@@ -54,7 +63,7 @@ export function isServerOverloadError(err: any): boolean {
 }
 
 /**
- * Retries the PRIMARY model (MODEL_CHAIN[0]) up to maxRetries times on 503 or 429
+ * Retries the PRIMARY model (HEAVY_MODEL_CHAIN[0]) up to maxRetries times on 503 or 429
  * with exponential backoff (baseDelayMs * 2^attempt). Never falls back to a lighter
  * model — the primary model is preserved across all retries.
  */
@@ -64,7 +73,7 @@ export async function generateWithRetry(
   maxRetries = 3,
   baseDelayMs = 2000
 ): Promise<any> {
-  const model = MODEL_CHAIN[0];
+  const model = HEAVY_MODEL_CHAIN[0];
   const timeoutMs = customTimeoutMs || DEFAULT_TIMEOUT_MS;
   let lastError: any = null;
 
@@ -76,29 +85,9 @@ export async function generateWithRetry(
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
 
-    let timeoutId: NodeJS.Timeout | undefined;
     try {
-      const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(
-          () => reject(new Error(`Model ${model} timed out after ${timeoutMs}ms`)),
-          timeoutMs
-        );
-      });
-
-      const modelConfig = params.config ? { ...params.config } : undefined;
-
-      const apiPromise = getClient().models.generateContent({
-        ...params,
-        config: modelConfig,
-        model,
-      });
-
-      const result: any = await Promise.race([apiPromise, timeoutPromise]);
-      if (timeoutId) clearTimeout(timeoutId);
-      await recordModelUsage(result?.usageMetadata?.totalTokenCount);
-      return result;
+      return await callModel(model, params, timeoutMs);
     } catch (err: any) {
-      if (timeoutId) clearTimeout(timeoutId);
       lastError = err;
 
       const isRetriable = isServerOverloadError(err) || isQuotaOrRateLimitError(err);
@@ -118,38 +107,57 @@ export async function generateWithRetry(
   throw lastError;
 }
 
-// Attempts model execution with automatic fallback on rate limit/quota or model unavailability
-export async function generateWithFallback(params: { contents: any; config?: any }, customTimeoutMs?: number) {
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Client-side request errors (bad prompt/schema, auth) fail identically on every retry. */
+function isPermanentError(err: any): boolean {
+  const status = err?.status ?? err?.statusCode ?? err?.response?.status;
+  return typeof status === 'number' && status >= 400 && status < 500 && status !== 404 && status !== 408 && status !== 429;
+}
+
+/** One model call raced against a timeout; token usage is metered on success. */
+async function callModel(model: string, params: { contents: any; config?: any }, timeoutMs: number): Promise<any> {
+  let timeoutId: NodeJS.Timeout | undefined;
+  try {
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(`Model ${model} timed out after ${timeoutMs}ms`)), timeoutMs);
+    });
+
+    const modelConfig = params.config ? { ...params.config } : undefined;
+    // thinkingConfig is only supported on Gemini 3 series models
+    if (modelConfig && !model.startsWith('gemini-3') && modelConfig.thinkingConfig) {
+      delete modelConfig.thinkingConfig;
+    }
+
+    const apiPromise = getClient().models.generateContent({ ...params, config: modelConfig, model });
+    const result: any = await Promise.race([apiPromise, timeoutPromise]);
+    await recordModelUsage(result?.usageMetadata?.totalTokenCount);
+    return result;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Real-time generation for challenges, chat and answer evaluation.
+ * Up to 3 attempts with 1.5s / 3s back-off, rotating across the lightweight tier so a
+ * 503 or 429 on one model is absorbed silently while the client stays in its loading state.
+ */
+export async function generateInteractive(params: { contents: any; config?: any }, customTimeoutMs?: number) {
+  const timeoutMs = customTimeoutMs || INTERACTIVE_TIMEOUT_MS;
+  const attempts = INTERACTIVE_BACKOFF_MS.length + 1;
   let lastError: any = null;
-  const timeoutMs = customTimeoutMs || DEFAULT_TIMEOUT_MS;
 
-  for (const model of MODEL_CHAIN) {
-    let timeoutId: NodeJS.Timeout | undefined;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const model = INTERACTIVE_MODEL_CHAIN[attempt % INTERACTIVE_MODEL_CHAIN.length];
     try {
-      const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(`Model ${model} timed out after ${timeoutMs}ms`)), timeoutMs);
-      });
-
-      const modelConfig = params.config ? { ...params.config } : undefined;
-      // thinkingConfig is only supported on Gemini 3 series models
-      if (modelConfig && !model.startsWith('gemini-3') && modelConfig.thinkingConfig) {
-        delete modelConfig.thinkingConfig;
-      }
-
-      const apiPromise = getClient().models.generateContent({
-        ...params,
-        config: modelConfig,
-        model,
-      });
-
-      const result: any = await Promise.race([apiPromise, timeoutPromise]);
-      if (timeoutId) clearTimeout(timeoutId);
-      await recordModelUsage(result?.usageMetadata?.totalTokenCount);
-      return result;
+      return await callModel(model, params, timeoutMs);
     } catch (err: any) {
-      if (timeoutId) clearTimeout(timeoutId);
       lastError = err;
-      console.warn(`Model ${model} failed (${err?.status || err?.statusCode || 'error'}: ${err?.message || err}). Retrying with next model...`);
+      if (isPermanentError(err) || attempt === attempts - 1) break;
+      const delay = INTERACTIVE_BACKOFF_MS[attempt];
+      console.warn(`[interactive] ${model} failed (${err?.status ?? 'error'}); retry ${attempt + 2}/${attempts} in ${delay}ms`);
+      await sleep(delay);
     }
   }
   throw lastError;

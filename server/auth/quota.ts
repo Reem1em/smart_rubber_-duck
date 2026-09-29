@@ -3,7 +3,7 @@
  *
  * quotaGuard resolves who is calling (signed-in user by `sub`, or a guest by IP),
  * rejects the request when the daily balance is spent, and opens an
- * AsyncLocalStorage scope. generateWithFallback() then reports the real
+ * AsyncLocalStorage scope. generateInteractive() then reports the real
  * `usageMetadata.totalTokenCount` through recordModelUsage(), so route handlers
  * need no changes and only tokens actually consumed are charged.
  */

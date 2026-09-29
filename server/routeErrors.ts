@@ -20,16 +20,26 @@ function detailOf(err: any): string {
  * Quota and rate-limit failures are propagated as a real 429 so the client's
  * RateLimitModal fires — masking them behind a cheerful offline payload told the
  * student the tutor was "unavailable" when they had simply run out of quota.
- * Everything else still degrades to the route's fallback, but is logged in full.
+ * Server overload (after the model layer's silent retries) degrades to the route's
+ * fallback flagged `degraded: true`, so an interactive submission never dead-ends on a
+ * banner. Heavy, one-off routes pass `degradeOnOverload: false` to keep the 503, since a
+ * canned syllabus or roadmap would be worse than an honest "try again".
+ * Everything else also degrades to the fallback, and is logged in full.
  */
 export function handleModelFailure(
   res: Response,
   context: string,
   err: any,
-  fallback: () => unknown
+  fallback: () => object,
+  { degradeOnOverload = true }: { degradeOnOverload?: boolean } = {}
 ) {
   const status = statusOf(err);
   const detail = detailOf(err);
+
+  if (isServerOverloadError(err) && degradeOnOverload) {
+    console.error(`[${context}] Gemini overload after retries (HTTP ${status ?? 503}); serving fallback: ${detail}`);
+    return res.json({ ...fallback(), degraded: true });
+  }
 
   if (isServerOverloadError(err)) {
     console.error(`[${context}] Gemini server overload (HTTP ${status ?? 503}): ${detail}`);

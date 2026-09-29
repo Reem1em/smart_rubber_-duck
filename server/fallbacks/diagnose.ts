@@ -1,23 +1,22 @@
-/** Static payload served when every model in the chain fails. */
+/**
+ * Served when every model attempt fails. It deliberately makes no claim about the
+ * student's understanding (score mirrors stated confidence, no invented flaws) and
+ * falls back to a concept-agnostic Strategy Think-Aloud prompt.
+ */
 export function diagnoseFallback(body: any) {
-  const conf = body?.confidenceLevel || 80;
+  const conf = typeof body?.confidenceLevel === 'number' ? body.confidenceLevel : 80;
+  const name = body?.concept?.name || 'هذا المفهوم';
+  const principle = Array.isArray(body?.concept?.keyPrinciples) ? body.concept.keyPrinciples[0] : '';
+
   return {
     statedConfidence: conf,
-    understandingScore: 75,
-    gapScore: Math.abs(conf - 75),
-    gapType: conf > 85 ? 'overconfident' : 'calibrated',
-    gapDescription: 'شرحك الرياضي جيد، لكن توجد ثغرة في تطبيق الخطوات الميكانيكية الدقيقة تحتاج لضبط وشرح صوتي.',
-    identifiedFlaws: ['الخلط المحتمل بين إشارات الحدود في العمليات الحسابية'],
-    strengths: ['استيعاب الهدف العام من العملية الرياضية'],
-    socraticQuestion: `المصفوفة A:
-
-$$A = \\begin{bmatrix} 1 & 4 \\\\ 2 & 3 \\end{bmatrix}$$
-
-خطوة كواكلي:
-
-$$\\det(A) = (1 \\times 3) + (4 \\times 2) = 11$$
-
-وين الغلطة في خطوتي؟ اشرح لي بصوتك إيش الخطوة الصح وليه.`,
-    socraticHint: 'راجع إشارة العملية في قاعدة محدد المصفوفة 2×2: هل هي جمع للقطرين أم طرح؟',
+    understandingScore: conf,
+    gapScore: 0,
+    gapType: 'calibrated',
+    gapDescription: 'كواك! السيرفرات زحمة شوي فما قدرت أحلل شرحك بالتفصيل — شرحك محفوظ، وخلنا نكمل بسؤال تفكير.',
+    identifiedFlaws: [],
+    strengths: [],
+    socraticQuestion: `قبل أي حل: اشرح لي بصوتك، وش أول خطوة تبدأ فيها لو طبّقت (${name}) على مثال جديد، وليه هذي بالذات؟`,
+    socraticHint: principle ? `ابدأ من المبدأ الأساسي: ${principle}` : 'ابدأ من تعريف المفهوم، وبعدين طبّقه على مثال صغير.',
   };
 }

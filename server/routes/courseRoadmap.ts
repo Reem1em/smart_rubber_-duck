@@ -78,6 +78,8 @@ export const handleParseSyllabus = async (req: Request, res: Response) => {
       milestones: Array.isArray(parsed.milestones) ? parsed.milestones : [],
     });
   } catch (err: any) {
-    return handleModelFailure(res, 'course-roadmap', err, () => courseRoadmapFallback(req.body));
+    return handleModelFailure(res, 'course-roadmap', err, () => courseRoadmapFallback(req.body), {
+      degradeOnOverload: false,
+    });
   }
 };

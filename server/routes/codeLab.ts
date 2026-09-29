@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 
-import { generateWithFallback } from '../gemini';
+import { generateInteractive } from '../gemini';
 import { handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildCodeLabPrompt } from '../prompts/codeLab';
@@ -15,7 +15,7 @@ export const handleGenerateCodeLab = async (req: Request, res: Response) => {
 
     const prompt = buildCodeLabPrompt({ lang, top });
 
-    const response = await generateWithFallback({
+    const response = await generateInteractive({
       contents: prompt,
       config: {
         responseMimeType: 'application/json',

@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 
-import { generateWithFallback } from '../gemini';
+import { generateInteractive } from '../gemini';
 import { handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildDevChallengePrompt, buildDevEvaluationPrompt, buildCustomLabEvaluationPrompt, CustomLabTestCase, DevLabMode } from '../prompts/devLab';
@@ -32,7 +32,7 @@ export const handleGenerateDevChallenge = async (req: Request, res: Response) =>
 
     const prompt = buildDevChallengePrompt({ mode, language, level });
 
-    const response = await generateWithFallback({
+    const response = await generateInteractive({
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -67,7 +67,7 @@ export const handleEvaluateDevSubmission = async (req: Request, res: Response) =
       studentExplanation,
     });
 
-    const response = await generateWithFallback({
+    const response = await generateInteractive({
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -108,7 +108,7 @@ export const handleEvaluateCustomLab = async (req: Request, res: Response) => {
   try {
     const prompt = buildCustomLabEvaluationPrompt({ taskPrompt, language, testCases, constraints, studentCode });
 
-    const response = await generateWithFallback({
+    const response = await generateInteractive({
       contents: prompt,
       config: {
         responseMimeType: 'application/json',

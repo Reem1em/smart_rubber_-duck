@@ -1,20 +1,18 @@
-/** Static payload served when every model in the chain fails. */
-export function socraticEvalFallback() {
+/**
+ * Served when every model attempt fails. It neither praises nor penalises the answer it
+ * could not read, and hands back a concept-agnostic transfer task so the session continues.
+ */
+export function socraticEvalFallback(body: any) {
+  const name = body?.concept?.name || 'المفهوم';
+
   return {
-    reasoningQualityScore: 90,
-    improvedUnderstanding: true,
-    duckReaction: 'كواك! صيد ذكي ودقيق! اكتشفت الخطأ في الإشارة وعرفت إن محدد 2×2 هو حاصل طرح القطرين (ad - bc).',
+    reasoningQualityScore: 50,
+    improvedUnderstanding: false,
+    duckReaction: 'كواك! السيرفرات زحمة فما قدرت أقيّم إجابتك بدقة — بس لا تشيل هم، إجابتك محفوظة. خلنا نكمل بتحدي تطبيقي.',
     transferChallenge: {
-      scenario: `لدينا الآن المصفوفة الجديدة B:
-
-$$B = \\begin{bmatrix} 2 & 5 \\\\ 1 & 4 \\end{bmatrix}$$
-
-ونريد حساب المعكوس $B^{-1}$.`,
-      task: 'بدون ما تحسب الناتج النهائي، اشرح لي بصوتك: إيش أول خطوة عددية راح تبدأ فيها للتأكد من وجود المعكوس وليه؟',
-      hints: [
-        'ابدأ بحساب المحدد: $\\det(B) = (2 \\times 4) - (5 \\times 1)$',
-        'تأكد أن المحدد لا يساوي صفراً لضمان وجود المعكوس $B^{-1}$',
-      ],
+      scenario: `طبّق (${name}) على موقف جديد من حياتك اليومية أو من تمرين في ملزمتك، يختلف عن المثال اللي شرحته.`,
+      task: 'بدون ما تحل للنهاية، اشرح لي بصوتك: وش أول خطوة راح تسويها وليه؟',
+      hints: ['حدد المعطيات والمطلوب أولاً.', 'اربط كل خطوة بالمبدأ اللي تعتمد عليه.'],
     },
   };
 }

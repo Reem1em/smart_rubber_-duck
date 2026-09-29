@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 
-import { generateWithFallback } from '../gemini';
+import { generateInteractive } from '../gemini';
 import { handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildSlidesPrompt } from '../prompts/generateSlides';
@@ -17,7 +17,7 @@ export const handleGenerateSlides = async (req: Request, res: Response) => {
 
     const prompt = buildSlidesPrompt({ conceptName, conceptSummary, keyPrinciples, materialContext });
 
-    const response = await generateWithFallback({
+    const response = await generateInteractive({
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
