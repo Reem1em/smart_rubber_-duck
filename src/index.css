@@ -3,9 +3,36 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
   body {
     font-family: 'Cairo', 'Tajawal', system-ui, -apple-system, sans-serif;
     transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  /* Wide code / math scrolls inside its own box, never the page */
+  pre {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  /* Touch devices: enforce 44x44px minimum hit targets (WCAG 2.5.5) */
+  @media (pointer: coarse) {
+    button,
+    [role='button'],
+    select,
+    input:not([type='checkbox']):not([type='radio']):not([type='range']) {
+      min-height: 44px;
+    }
+
+    button,
+    [role='button'] {
+      min-width: 44px;
+    }
   }
 }
 

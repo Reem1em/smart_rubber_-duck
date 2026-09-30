@@ -4,13 +4,16 @@ import dotenv from 'dotenv';
 import { registerRoutes } from './server/routes/index';
 import { mountAssets } from './server/static';
 import { initSessionSecret } from './server/auth/session';
+import { assertGeminiConfigured } from './server/gemini';
 
 dotenv.config();
 
-const PORT = 3000;
+// Render (and most PaaS hosts) inject PORT; 3000 is the local default.
+const PORT = Number(process.env.PORT) || 3000;
 
 async function startServer() {
   await initSessionSecret();
+  assertGeminiConfigured();
 
   const app = express();
 

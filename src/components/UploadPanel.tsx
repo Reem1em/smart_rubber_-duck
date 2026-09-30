@@ -207,7 +207,7 @@ export const UploadPanel: React.FC = () => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6">
+    <div className="max-w-3xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Header Banner */}
       <div className="text-center space-y-3">
         <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight flex items-center justify-center gap-2">

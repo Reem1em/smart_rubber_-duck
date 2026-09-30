@@ -10,7 +10,7 @@ export const ThemeToggleCornerButton: React.FC = () => {
   return (
     <div
       id="theme-toggle-corner-container"
-      className={`fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50 flex items-center gap-2 group select-none`}
+      className={`fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50 hidden md:flex items-center gap-2 group select-none`}
     >
       <motion.button
         id="theme-toggle-corner-btn"

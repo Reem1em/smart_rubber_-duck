@@ -111,7 +111,7 @@ export const TeachDuckPanel: React.FC = () => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6">
+    <div className="max-w-3xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Top Header */}
       <div className="flex items-center justify-between">
         <button
@@ -165,8 +165,8 @@ export const TeachDuckPanel: React.FC = () => {
       </div>
 
       {/* Explanation Box + Voice Control */}
-      <div className="bg-white p-5 rounded-2xl border border-amber-200/80 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-amber-200/80 shadow-sm space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <label className="text-sm font-bold text-slate-800">
             شرحك وبيانك الموجه للبطة المطاطية:
           </label>

@@ -121,7 +121,7 @@ export const SocraticQuestionPanel: React.FC = () => {
   const GapIcon = gapInfo.icon;
 
   return (
-    <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6">
+    <div className="max-w-3xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Duck Character */}
       <div className="flex justify-center py-1">
         <DuckCharacter
@@ -224,7 +224,7 @@ export const SocraticQuestionPanel: React.FC = () => {
 
         {/* Student Response Area */}
         <div className="space-y-3 pt-2">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
               إجابتك السديدة على السؤال :
             </label>

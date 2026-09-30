@@ -263,7 +263,7 @@ export const CodeLabPanel: React.FC = () => {
       : 'تحدي البناء والتنفيذ';
 
   return (
-    <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
+    <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-amber-200/80 dark:border-slate-800 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">

@@ -136,7 +136,7 @@ export const MathView: React.FC<MathViewProps> = ({ content, className = '', asI
 
         if (block.type === 'fraction') {
           return (
-            <div key={`frac-${idx}`} className="my-3 flex justify-center">
+            <div key={`frac-${idx}`} className="my-3 flex justify-center overflow-x-auto">
               <div className="inline-flex flex-col items-center text-center font-bold px-3 py-1 bg-slate-50/80 dark:bg-slate-900/80 rounded-lg border border-slate-200 dark:border-slate-800 shadow-2xs">
                 <span className="text-sm sm:text-base px-2 text-slate-900 dark:text-slate-100">
                   <InlineMathParser text={block.numerator || ''} />
@@ -171,7 +171,7 @@ export const MathView: React.FC<MathViewProps> = ({ content, className = '', asI
             );
           } catch {
             return (
-              <pre key={`latex-raw-${idx}`} className="font-mono text-center my-2 p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm">
+              <pre key={`latex-raw-${idx}`} className="font-mono text-center my-2 p-2 overflow-x-auto max-w-full bg-slate-100 dark:bg-slate-800 rounded-lg text-sm">
                 {block.content}
               </pre>
             );

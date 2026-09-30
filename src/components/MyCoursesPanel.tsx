@@ -87,7 +87,7 @@ export const MyCoursesPanel: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
+    <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Header */}
       <div className="text-center space-y-2">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-700/60 text-amber-900 dark:text-amber-300">
@@ -175,7 +175,7 @@ export const MyCoursesPanel: React.FC = () => {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {courses.map((course) => {
             const progress = courseProgress(course);
             const isActive = course.id === activeCourseId;
@@ -184,7 +184,7 @@ export const MyCoursesPanel: React.FC = () => {
               <motion.div
                 whileHover={{ scale: 1.01, y: -2 }}
                 onClick={() => openCourse(course)}
-                className={`bg-white dark:bg-slate-900 p-5 rounded-2xl border shadow-xs hover:shadow-md transition-all cursor-pointer space-y-3 group ${
+                className={`w-full min-w-0 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border shadow-xs hover:shadow-md transition-all cursor-pointer space-y-3 group ${
                   isActive
                     ? 'border-amber-400 ring-2 ring-amber-200 dark:ring-amber-900/60'
                     : 'border-amber-200/80 dark:border-slate-800 hover:border-amber-400'
@@ -279,7 +279,7 @@ export const MyCoursesPanel: React.FC = () => {
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
                     transition={{ duration: 0.25 }}
-                    className="overflow-hidden"
+                    className="col-span-full overflow-hidden"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="bg-slate-50 dark:bg-slate-900/60 border border-t-0 border-amber-200/60 dark:border-slate-800 rounded-b-2xl px-4 py-4">

@@ -209,7 +209,7 @@ export const QuizPanel: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="max-w-2xl mx-auto p-8 text-center space-y-6">
+      <div className="max-w-2xl mx-auto p-4 sm:p-6 lg:p-8 text-center space-y-6">
         <DuckCharacter state="thinking" message="البطة تصيغ الأسئلةالمتدرجة لإخراج اختبارك القصير..." />
         <div className="flex items-center justify-center gap-3 text-amber-800 font-bold text-lg">
           <Loader2 className="w-6 h-6 animate-spin text-amber-600" />
@@ -221,7 +221,7 @@ export const QuizPanel: React.FC = () => {
 
   if (quizQuestions.length === 0) {
     return (
-      <div className="max-w-xl mx-auto p-6 bg-white rounded-2xl border border-rose-200 text-center space-y-4">
+      <div className="max-w-xl mx-4 sm:mx-auto p-4 sm:p-6 bg-white rounded-2xl border border-rose-200 text-center space-y-4">
         <AlertCircle className="w-10 h-10 text-rose-500 mx-auto" />
         <h3 className="text-lg font-bold text-slate-900">لم يتم جلب الأسئلة بنجاح</h3>
         <p className="text-sm text-slate-600">{error || 'يرجى المحاولة مرة أخرى لتوليد أسئلة الاختبار.'}</p>
@@ -240,7 +240,7 @@ export const QuizPanel: React.FC = () => {
   const diffBadge = getDifficultyBadge(currentQuestion?.difficulty || '');
 
   return (
-    <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6">
+    <div className="max-w-3xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Header */}
       <div className="text-center space-y-2">
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 border border-amber-200 text-amber-900 font-bold text-xs">

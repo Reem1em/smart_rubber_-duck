@@ -23,7 +23,25 @@ import {
   Library,
   Sun,
   Moon,
+  Menu,
+  X,
+  type LucideIcon,
 } from 'lucide-react';
+
+interface NavItem {
+  key: string;
+  label: string;
+  title?: string;
+  icon: LucideIcon;
+  active: boolean;
+  onClick: () => void;
+  badge?: React.ReactNode;
+}
+
+const navTone = (active: boolean) =>
+  active
+    ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+    : 'bg-amber-50 dark:bg-slate-800 text-amber-900 dark:text-amber-300 border-amber-200 dark:border-slate-700 hover:bg-amber-100 dark:hover:bg-slate-750';
 
 function AppContent() {
   const {
@@ -63,10 +81,86 @@ function AppContent() {
 
   const currentStepNum = getStepNumber(step);
 
+  const [menuOpen, setMenuOpen] = React.useState(false);
+
+  // Close the mobile drawer on step change, Escape, or when crossing into desktop width
+  React.useEffect(() => setMenuOpen(false), [step]);
+  React.useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false);
+    const mq = window.matchMedia('(min-width: 48rem)');
+    const onMq = () => mq.matches && setMenuOpen(false);
+    document.addEventListener('keydown', onKey);
+    mq.addEventListener('change', onMq);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      mq.removeEventListener('change', onMq);
+    };
+  }, [menuOpen]);
+
+  const handleHome = () => {
+    setMenuOpen(false);
+    resetAll();
+  };
+
+  const isDark = theme === 'dark';
+  const themeLabel = isDark ? 'التحويل إلى الوضع النهاري' : 'التحويل إلى الوضع الليلي';
+  const themeShortLabel = isDark ? 'الوضع النهاري' : 'الوضع الليلي';
+  const themeTone = isDark
+    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
+    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50';
+  const themeIcon = isDark ? (
+    <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+  ) : (
+    <Moon className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+  );
+
+  const navItems: NavItem[] = [
+    {
+      key: 'courses',
+      label: 'موادي',
+      icon: Library,
+      active: step === 'courses',
+      onClick: () => setStep('courses'),
+      badge:
+        courses.length > 0 ? (
+          <span className="px-1.5 rounded-full bg-amber-200 text-amber-950 text-[10px] font-black">
+            {courses.length}
+          </span>
+        ) : undefined,
+    },
+    {
+      key: 'roadmap',
+      label: 'خريطة المقرر',
+      icon: MapIcon,
+      active: step === 'roadmap',
+      onClick: () => setStep('roadmap'),
+    },
+    ...(activeCourse
+      ? [
+          {
+            key: 'chat',
+            label: 'اسأل كواكلي',
+            title: `اسأل كواكلي عن مادة ${activeCourse.title}`,
+            icon: MessageCircle,
+            active: false,
+            onClick: () => openCourseChat(),
+          },
+        ]
+      : []),
+    {
+      key: 'codeLab',
+      label: 'معمل البرمجة',
+      icon: Code2,
+      active: step === 'codeLab',
+      onClick: () => setStep('codeLab'),
+    },
+  ];
+
   return (
     <div
       dir="rtl"
-      className="min-h-screen bg-gradient-to-b from-amber-50/60 via-slate-50 to-amber-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-amber-200 dark:selection:bg-amber-800 selection:text-amber-900 dark:selection:text-amber-100 flex flex-col justify-between transition-colors duration-200 font-arabic"
+      className="w-full min-h-screen overflow-x-clip bg-gradient-to-b from-amber-50/60 via-slate-50 to-amber-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-amber-200 dark:selection:bg-amber-800 selection:text-amber-900 dark:selection:text-amber-100 flex flex-col justify-between transition-colors duration-200 font-arabic"
     >
       <RateLimitModal isOpen={rateLimitModalOpen} onClose={closeRateLimitModal} />
 
@@ -77,11 +171,11 @@ function AppContent() {
 
       {/* Top Navbar */}
       <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-amber-200/60 dark:border-slate-800 shadow-xs w-full">
-        <div className="w-full px-4 sm:px-6 lg:px-8 py-2.5 flex items-center justify-between gap-4">
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between gap-3">
           {/* Logo & App Name (Far Right in RTL) */}
           <div
-            onClick={resetAll}
-            className="flex items-center gap-2.5 sm:gap-3 cursor-pointer group select-none shrink-0"
+            onClick={handleHome}
+            className="flex items-center gap-2.5 sm:gap-3 cursor-pointer group select-none min-w-0"
           >
             <div className="w-10 h-10 bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/60 rounded-xl flex items-center justify-center p-1 shadow-xs group-hover:scale-105 transition-transform overflow-hidden shrink-0">
               <img
@@ -92,107 +186,116 @@ function AppContent() {
                 referrerPolicy="no-referrer"
               />
             </div>
-            <div>
-              <h1 className="font-black text-base sm:text-lg text-slate-900 dark:text-slate-100 leading-tight">
+            <div className="min-w-0">
+              <h1 className="font-black text-base sm:text-lg text-slate-900 dark:text-slate-100 leading-tight truncate">
                 كواكلي (Quakly)
               </h1>
-              <p className="text-[11px] font-bold text-amber-900 dark:text-amber-400 hidden sm:block">
+              <p className="text-[11px] font-bold text-amber-900 dark:text-amber-400 hidden lg:block">
                 اشرح بصوتك • اكتشف ثغراتك • اختبر فهمك
               </p>
             </div>
           </div>
 
-          {/* Action Tools (Far Left in RTL) */}
-          <div className="flex items-center gap-2 shrink-0 ms-auto">
-            <button
-              onClick={() => setStep('courses')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                step === 'courses'
-                  ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
-                  : 'bg-amber-50 dark:bg-slate-800 text-amber-900 dark:text-amber-300 border-amber-200 dark:border-slate-700 hover:bg-amber-100 dark:hover:bg-slate-750'
-              }`}
-            >
-              <Library className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">موادي</span>
-              {courses.length > 0 && (
-                <span className="px-1.5 rounded-full bg-amber-200 text-amber-950 text-[10px] font-black">
-                  {courses.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setStep('roadmap')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                step === 'roadmap'
-                  ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
-                  : 'bg-amber-50 dark:bg-slate-800 text-amber-900 dark:text-amber-300 border-amber-200 dark:border-slate-700 hover:bg-amber-100 dark:hover:bg-slate-750'
-              }`}
-            >
-              <MapIcon className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">خريطة المقرر</span>
-            </button>
-
-            {activeCourse && (
+          {/* Desktop Action Tools (Far Left in RTL) */}
+          <nav aria-label="التنقل الرئيسي" className="hidden md:flex items-center gap-2 shrink-0 ms-auto">
+            {navItems.map((item) => (
               <button
-                onClick={() => openCourseChat()}
-                title={`اسأل كواكلي عن مادة ${activeCourse.title}`}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer bg-amber-50 dark:bg-slate-800 text-amber-900 dark:text-amber-300 border-amber-200 dark:border-slate-700 hover:bg-amber-100 dark:hover:bg-slate-750"
+                key={item.key}
+                onClick={item.onClick}
+                title={item.title}
+                aria-current={item.active ? 'page' : undefined}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${navTone(item.active)}`}
               >
-                <MessageCircle className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">اسأل كواكلي</span>
+                <item.icon className="w-3.5 h-3.5" />
+                <span>{item.label}</span>
+                {item.badge}
               </button>
-            )}
+            ))}
 
-            <button
-              onClick={() => setStep('codeLab')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                step === 'codeLab'
-                  ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
-                  : 'bg-amber-50 dark:bg-slate-800 text-amber-900 dark:text-amber-300 border-amber-200 dark:border-slate-700 hover:bg-amber-100 dark:hover:bg-slate-750'
-              }`}
-            >
-              <Code2 className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">معمل البرمجة</span>
-            </button>
-
-            {/* Corner / Header Day & Night Switcher */}
+            {/* Header Day & Night Switcher */}
             <button
               id="header-theme-toggle"
               onClick={toggleTheme}
-              title={theme === 'dark' ? 'التحويل إلى الوضع النهاري' : 'التحويل إلى الوضع الليلي'}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                theme === 'dark'
-                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
-                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-              }`}
+              title={themeLabel}
+              aria-label={themeLabel}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${themeTone}`}
             >
-              {theme === 'dark' ? (
-                <>
-                  <Sun className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden sm:inline">الوضع النهاري</span>
-                </>
-              ) : (
-                <>
-                  <Moon className="w-3.5 h-3.5 text-indigo-600" />
-                  <span className="hidden sm:inline">الوضع الليلي</span>
-                </>
-              )}
+              {themeIcon}
+              <span className="hidden lg:inline">{themeShortLabel}</span>
             </button>
-
-            <AccountMenu />
 
             {step !== 'upload' && (
               <button
                 onClick={resetAll}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all cursor-pointer"
+                title="البدء من جديد"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-                <span className="hidden sm:inline">البدء من جديد</span>
+                <span className="hidden lg:inline">البدء من جديد</span>
               </button>
             )}
+          </nav>
+
+          {/* Account (avatar & token badge) — shared across breakpoints; hamburger on mobile */}
+          <div className="flex items-center gap-2 shrink-0 ms-auto md:ms-0">
+            <AccountMenu />
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label={menuOpen ? 'إغلاق القائمة' : 'فتح القائمة'}
+              aria-expanded={menuOpen}
+              aria-controls="mobile-nav"
+              className="md:hidden inline-flex items-center justify-center w-11 h-11 rounded-xl border border-amber-200 dark:border-slate-700 bg-amber-50 dark:bg-slate-800 text-amber-900 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-slate-700 transition-all cursor-pointer"
+            >
+              {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile Navigation Drawer */}
+        {menuOpen && (
+          <nav
+            id="mobile-nav"
+            aria-label="التنقل الرئيسي"
+            className="md:hidden border-t border-amber-200/60 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 grid grid-cols-1 sm:grid-cols-2 gap-2"
+          >
+            {navItems.map((item) => (
+              <button
+                key={item.key}
+                onClick={() => {
+                  item.onClick();
+                  setMenuOpen(false);
+                }}
+                aria-current={item.active ? 'page' : undefined}
+                className={`w-full min-h-11 inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-bold border transition-all cursor-pointer ${navTone(item.active)}`}
+              >
+                <item.icon className="w-4 h-4 shrink-0" />
+                <span className="flex-1 text-start truncate">{item.label}</span>
+                {item.badge}
+              </button>
+            ))}
+
+            <button
+              onClick={toggleTheme}
+              className={`w-full min-h-11 inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-bold border transition-all cursor-pointer ${themeTone}`}
+            >
+              {themeIcon}
+              <span className="flex-1 text-start">{themeShortLabel}</span>
+            </button>
+
+            {step !== 'upload' && (
+              <button
+                onClick={() => {
+                  resetAll();
+                  setMenuOpen(false);
+                }}
+                className="w-full min-h-11 inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4 text-slate-500 shrink-0" />
+                <span className="flex-1 text-start">البدء من جديد</span>
+              </button>
+            )}
+          </nav>
+        )}
 
         {/* Learning Loop Stepper Indicator */}
         <div className="bg-amber-100/50 dark:bg-slate-900/60 border-t border-amber-200/50 dark:border-slate-800 py-2.5">
@@ -290,7 +393,7 @@ function AppContent() {
       </header>
 
       {/* Main Learning Flow Panel Stage */}
-      <main className="flex-1 py-6">
+      <main className="flex-1 w-full min-w-0 py-2 sm:py-4 lg:py-6">
         {step === 'upload' && <UploadPanel />}
         {step === 'courses' && <MyCoursesPanel />}
         {step === 'concepts' && <ConceptsPanel />}

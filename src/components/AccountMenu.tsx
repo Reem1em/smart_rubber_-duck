@@ -76,7 +76,7 @@ export const AccountMenu: React.FC = () => {
   const errorBubble = error && (
     <div
       role="alert"
-      className="absolute top-full mt-2 end-0 w-64 z-40 flex items-start gap-2 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/80 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-bold shadow-lg"
+      className="absolute top-full mt-2 end-0 w-[min(16rem,calc(100vw-2rem))] z-40 flex items-start gap-2 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/80 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-bold shadow-lg"
     >
       <span className="flex-1">{error}</span>
       <button onClick={() => setError(null)} aria-label="إغلاق" className="cursor-pointer">
@@ -113,7 +113,8 @@ export const AccountMenu: React.FC = () => {
             className={signInClass}
           >
             <GoogleIcon className="w-4 h-4" />
-            <span>تسجيل الدخول عبر Google</span>
+            <span className="hidden sm:inline">تسجيل الدخول عبر Google</span>
+            <span className="sm:hidden">دخول</span>
             {config.devLoginEnabled && (
               <span className="px-1.5 rounded-full bg-amber-200 text-amber-950 text-[9px] font-black">تجريبي</span>
             )}
@@ -154,7 +155,7 @@ export const AccountMenu: React.FC = () => {
       {open && (
         <div
           role="menu"
-          className="absolute top-full mt-2 end-0 w-72 z-40 rounded-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-slate-700 shadow-xl p-4 space-y-3"
+          className="absolute top-full mt-2 end-0 w-[min(18rem,calc(100vw-2rem))] z-40 rounded-2xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-slate-700 shadow-xl p-4 space-y-3"
         >
           <div className="flex items-center gap-3">
             <Avatar src={user.avatar} name={user.name} />
