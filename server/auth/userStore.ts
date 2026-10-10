@@ -24,7 +24,7 @@ export interface UserRecord {
   quota: {
     day: string;
     used: number;
-    /** Per-user override; falls back to DAILY_TOKEN_LIMIT when absent. */
+    /** Per-user override; falls back to DEFAULT_DAILY_TOKENS when absent. */
     limit?: number;
   };
 }
@@ -114,6 +114,11 @@ export async function upsertUser(profile: {
     ? { ...existing, ...profile, lastLoginAt: now }
     : { ...profile, createdAt: now, lastLoginAt: now, quota: { day: quotaDay(), used: 0 } };
   rollQuota(user);
+  // Every login lifts the student to the current default: a stale override below it is dropped.
+  if (user.quota.limit !== undefined && user.quota.limit < authConfig.userDailyTokens) {
+    const { limit: _stale, ...rest } = user.quota;
+    user.quota = rest;
+  }
   map.set(user.id, user);
   await persist();
   return user;

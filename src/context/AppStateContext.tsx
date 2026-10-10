@@ -18,6 +18,11 @@ import {
 } from '../types';
 import * as courseStore from '../services/courseStore';
 import { useAuth } from './AuthContext';
+import {
+  fetchServerCourses,
+  pushCourseToServer,
+  deleteCourseFromServer,
+} from '../services/api/coursesApi';
 
 interface AppState {
   step: AppStep;
@@ -195,6 +200,28 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         } catch (err) {
           console.warn('تعذر ربط المواد المحلية بحسابك:', err);
         }
+
+        // --- Cross-device sync: pull server courses and merge into IndexedDB ---
+        try {
+          const serverCourses = await fetchServerCourses();
+          for (const sc of serverCourses) {
+            const local = await courseStore.getCourse(sc.id);
+            // Newer copy wins; never roll back local progress.
+            if (!local || local.updatedAt < sc.updatedAt) {
+              await courseStore.putCourse({ ...sc, ownerId });
+            }
+          }
+          // Push any local courses the server doesn't know about yet.
+          const allLocal = await courseStore.listCourses(ownerId);
+          const serverIds = new Set(serverCourses.map((c) => c.id));
+          for (const lc of allLocal) {
+            if (!serverIds.has(lc.id)) {
+              void pushCourseToServer(lc);
+            }
+          }
+        } catch (err) {
+          console.warn('تعذر مزامنة المواد مع الخادم:', err);
+        }
       }
       await refreshCourses();
     })();
@@ -202,9 +229,11 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const saveCourse = async (id: string, mat: MaterialInput, extracted: Concept[]) => {
     try {
-      await courseStore.upsertCourseFromMaterial(id, mat, extracted, ownerId);
+      const saved = await courseStore.upsertCourseFromMaterial(id, mat, extracted, ownerId);
       setActiveCourseId(id);
       await refreshCourses();
+      // Mirror to server for cross-device sync (fire-and-forget).
+      if (ownerId) void pushCourseToServer(saved);
     } catch (err) {
       console.warn('تعذر حفظ المادة محلياً:', err);
     }
@@ -221,6 +250,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (courseId === activeCourseId) {
       setConcepts(result.course.concepts);
     }
+    if (ownerId && !result.duplicate) void pushCourseToServer(result.course);
     return { duplicate: result.duplicate };
   };
 
@@ -230,6 +260,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (courseId === activeCourseId && updated) {
       setConcepts(updated.concepts);
     }
+    if (ownerId && updated) void pushCourseToServer(updated);
   };
 
   const openCourse = (course: SavedCourse) => {
@@ -256,13 +287,16 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await courseStore.deleteCourse(id);
     if (activeCourseId === id) setActiveCourseId(null);
     await refreshCourses();
+    // Mirror deletion to server (fire-and-forget).
+    if (ownerId) void deleteCourseFromServer(id);
   };
 
   const markActiveConceptMastered = async (conceptId: string) => {
     if (!activeCourseId || !conceptId) return;
     try {
-      await courseStore.markConceptMastered(activeCourseId, conceptId);
+      const updated = await courseStore.markConceptMastered(activeCourseId, conceptId);
       await refreshCourses();
+      if (ownerId && updated) void pushCourseToServer(updated);
     } catch (err) {
       console.warn('تعذر تحديث تقدم المادة:', err);
     }
@@ -271,8 +305,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const markActiveConceptGap = async (conceptId: string) => {
     if (!activeCourseId || !conceptId) return;
     try {
-      await courseStore.markConceptGap(activeCourseId, conceptId);
+      const updated = await courseStore.markConceptGap(activeCourseId, conceptId);
       await refreshCourses();
+      if (ownerId && updated) void pushCourseToServer(updated);
     } catch (err) {
       console.warn('تعذر تسجيل الثغرة في خريطة المقرر:', err);
     }
@@ -281,8 +316,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const markActiveConceptInProgress = async (conceptId: string) => {
     if (!activeCourseId || !conceptId) return;
     try {
-      await courseStore.markConceptInProgress(activeCourseId, conceptId);
+      const updated = await courseStore.markConceptInProgress(activeCourseId, conceptId);
       await refreshCourses();
+      if (ownerId && updated) void pushCourseToServer(updated);
     } catch (err) {
       console.warn('تعذر تحديث حالة المفهوم:', err);
     }
@@ -295,26 +331,30 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const saveActiveRoadmap = async (roadmap: CourseRoadmap) => {
     if (!activeCourseId) return;
-    await courseStore.saveRoadmap(activeCourseId, roadmap);
+    const updated = await courseStore.saveRoadmap(activeCourseId, roadmap);
     await refreshCourses();
+    if (ownerId && updated) void pushCourseToServer(updated);
   };
 
   const resetActiveRoadmap = async () => {
     if (!activeCourseId) return;
-    await courseStore.clearRoadmap(activeCourseId);
+    const updated = await courseStore.clearRoadmap(activeCourseId);
     await refreshCourses();
+    if (ownerId && updated) void pushCourseToServer(updated);
   };
 
   const saveActiveMilestonePlan = async (plan: ExamMilestonePlan) => {
     if (!activeCourseId) return;
-    await courseStore.saveMilestonePlan(activeCourseId, plan);
+    const updated = await courseStore.saveMilestonePlan(activeCourseId, plan);
     await refreshCourses();
+    if (ownerId && updated) void pushCourseToServer(updated);
   };
 
   const clearActiveMilestonePlan = async () => {
     if (!activeCourseId) return;
-    await courseStore.clearMilestonePlan(activeCourseId);
+    const updated = await courseStore.clearMilestonePlan(activeCourseId);
     await refreshCourses();
+    if (ownerId && updated) void pushCourseToServer(updated);
   };
 
   const openCourseChat = (concept?: Concept | null) => {

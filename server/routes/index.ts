@@ -14,6 +14,7 @@ import { handleGenerateBugChallenge, handleEvaluateBugChallenge } from './bugHun
 import { handleReviewProject } from './reviewProject';
 import { handleGenerateDevChallenge, handleEvaluateDevSubmission, handleEvaluateCustomLab } from './devLab';
 import { handleAuthConfig, handleAuthMe, handleDevAuth, handleGoogleAuth, handleLogout } from './auth';
+import { handleListCourses, handlePutCourse, handleDeleteCourse } from './courses';
 import { quotaGuard } from '../auth/quota';
 import { apiResponseWatchdog, safe } from '../httpSafety';
 
@@ -38,6 +39,11 @@ export function registerRoutes(app: Express): void {
   app.post('/api/auth/dev', safe(handleDevAuth));
   app.get('/api/auth/me', safe(handleAuthMe));
   app.post('/api/auth/logout', safe(handleLogout));
+
+  // 0b. COURSE PERSISTENCE: cross-device sync (requires session token)
+  app.get('/api/courses', safe(handleListCourses));
+  app.put('/api/courses/:id', safe(handlePutCourse));
+  app.delete('/api/courses/:id', safe(handleDeleteCourse));
 
   // 1. Analyze Uploaded Material & Extract Academic Concepts
   app.post('/api/analyze-material', safe(quotaGuard), safe(handleAnalyzeMaterial));

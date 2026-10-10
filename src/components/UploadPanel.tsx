@@ -1,11 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { motion } from 'motion/react';
 import { useAppState } from '../context/AppStateContext';
+import { useAuth } from '../context/AuthContext';
 import { analyzeMaterial } from '../services/ai';
 import { formatBytes } from '../utils/formatBytes';
 import { hashFile, hashContent, getCourse } from '../services/courseStore';
 import { isRateLimitError, isServerOverloadError } from '../utils/rateLimit';
 import { DuckCharacter } from './DuckCharacter';
+import { SignInRequiredModal } from './SignInRequiredModal';
 import {
   FileUp,
   FileText,
@@ -44,8 +46,33 @@ export const UploadPanel: React.FC = () => {
   const [serverOverload, setServerOverload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Uploads require a real Google session: guests and the mock dev fallback (which only
+  // exists while GOOGLE_CLIENT_ID is unset) cannot persist tokens or a daily balance.
+  const { status: authStatus, config: authConfig } = useAuth();
+  const uploadAllowed = authStatus === 'authenticated' && Boolean(authConfig?.googleClientId);
+  const [signInPromptOpen, setSignInPromptOpen] = useState(false);
+  const pendingFileRef = useRef<File | null>(null);
+
+  const requireSignIn = (file: File | null): boolean => {
+    if (uploadAllowed) return false;
+    pendingFileRef.current = file;
+    setSignInPromptOpen(true);
+    return true;
+  };
+
+  const closeSignInPrompt = () => {
+    pendingFileRef.current = null;
+    setSignInPromptOpen(false);
+  };
+
+  const openFilePicker = () => {
+    if (requireSignIn(null)) return;
+    fileInputRef.current?.click();
+  };
+
   const handleFileSelect = async (file: File) => {
     if (!file) return;
+    if (requireSignIn(file)) return;
     setError(null);
     setMaterialHash(null);
 
@@ -122,6 +149,14 @@ export const UploadPanel: React.FC = () => {
       };
     }
   };
+
+  // Signing in from the modal resumes the file the student was trying to upload.
+  useEffect(() => {
+    if (!uploadAllowed || !signInPromptOpen) return;
+    const pending = pendingFileRef.current;
+    closeSignInPrompt();
+    if (pending) void handleFileSelect(pending);
+  }, [uploadAllowed]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -208,6 +243,8 @@ export const UploadPanel: React.FC = () => {
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+      <SignInRequiredModal isOpen={signInPromptOpen} onClose={closeSignInPrompt} />
+
       {/* Header Banner */}
       <div className="text-center space-y-3">
         <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight flex items-center justify-center gap-2">
@@ -301,7 +338,7 @@ export const UploadPanel: React.FC = () => {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={openFilePicker}
               className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center space-y-3 ${
                 isDragging
                   ? 'border-amber-500 bg-amber-50/80 scale-[1.01]'
@@ -314,7 +351,12 @@ export const UploadPanel: React.FC = () => {
                 ref={fileInputRef}
                 type="file"
                 accept=".pdf,.txt,.md"
-                onChange={(e) => e.target.files?.[0] && void handleFileSelect(e.target.files[0])}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (file) void handleFileSelect(file);
+                }}
                 className="hidden"
               />
 

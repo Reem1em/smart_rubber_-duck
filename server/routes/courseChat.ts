@@ -8,6 +8,8 @@ import {
   CourseChatTurn,
 } from '../prompts/courseChat';
 import { courseChatFallback } from '../fallbacks/courseChat';
+import { bearerToken, verifySession } from '../auth/session';
+import { getUserCourse } from '../auth/courseStore';
 
 const normalizeHistory = (raw: unknown): CourseChatTurn[] =>
   Array.isArray(raw)
@@ -20,10 +22,37 @@ const normalizeHistory = (raw: unknown): CourseChatTurn[] =>
     : [];
 
 /**
- * Course-isolated tutor chat. The course id in the path scopes the grounding to
- * that workspace only; history is supplied by the client, which stores it per course.
+ * Course-isolated tutor chat.
+ *
+ * Authorization:
+ *   - If a valid session token is present, the course MUST belong to that user
+ *     in the server store (or must not exist there at all — guest/local-only).
+ *   - If no token is present (guest), the request is allowed through — guest
+ *     courses have no server record, so there is nothing to protect.
+ *
+ * This closes the latent IDOR flagged in the previous audit: req.params.id is
+ * now verified, not silently ignored.
  */
 export const handleCourseChat = async (req: Request, res: Response) => {
+  const courseId = req.params.id;
+  if (!courseId) {
+    return res.status(400).json({ error: 'معرّف المادة مطلوب.' });
+  }
+
+  // Derive identity from the session token — never from the request body.
+  const sub = verifySession(bearerToken(req.headers.authorization));
+
+  if (sub) {
+    // Signed-in user: verify the course belongs to them if a server record exists.
+    const serverCourse = await getUserCourse(sub, courseId).catch(() => undefined);
+    if (serverCourse && serverCourse.ownerId !== sub) {
+      // Course exists on the server but belongs to someone else.
+      return res.status(403).json({ error: 'غير مصرح لك بالوصول إلى هذه المادة.' });
+    }
+    // If serverCourse is undefined the course is local-only → allow through.
+  }
+  // No token → guest → allow through (no server record to guard).
+
   try {
     const message = String(req.body?.message || '').trim();
     if (!message) {
@@ -44,7 +73,6 @@ export const handleCourseChat = async (req: Request, res: Response) => {
       contents: prompt,
       config: {
         systemInstruction: COURSE_CHAT_SYSTEM_INSTRUCTION,
-        // Plain prose: no JSON schema, so the turn stays cheap.
         temperature: 0.8,
         maxOutputTokens: 700,
       },

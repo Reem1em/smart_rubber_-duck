@@ -1,7 +1,7 @@
 /** Placeholder shipped in .env.example; treated the same as "not configured". */
 export const GOOGLE_CLIENT_ID_PLACEHOLDER = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
 
-const DEFAULT_USER_DAILY_TOKENS = 200_000;
+export const DEFAULT_USER_DAILY_TOKENS = 500_000;
 const DEFAULT_GUEST_DAILY_TOKENS = 30_000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -28,7 +28,11 @@ export const authConfig = {
     );
   },
   get userDailyTokens(): number {
-    return positiveInt(process.env.DAILY_TOKEN_LIMIT, DEFAULT_USER_DAILY_TOKENS);
+    // DEFAULT_DAILY_TOKENS is canonical; DAILY_TOKEN_LIMIT is still honoured for older .env files.
+    return positiveInt(
+      process.env.DEFAULT_DAILY_TOKENS ?? process.env.DAILY_TOKEN_LIMIT,
+      DEFAULT_USER_DAILY_TOKENS
+    );
   },
   get guestDailyTokens(): number {
     return positiveInt(process.env.GUEST_DAILY_TOKEN_LIMIT, DEFAULT_GUEST_DAILY_TOKENS);
