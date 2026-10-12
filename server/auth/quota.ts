@@ -68,8 +68,8 @@ export const quotaGuard: RequestHandler = async (req, res, next) => {
       return res.status(429).json({
         error:
           identity.kind === 'user'
-            ? 'خلص رصيدك اليومي من كواكلي 🦆 يتجدد الرصيد بعد منتصف الليل (UTC).'
-            : 'خلص رصيد الزوّار اليومي 🦆 سجّل دخولك عبر Google لرصيد أكبر.',
+            ? 'خلص رصيدك اليومي من كواكلي 🐥 يتجدد الرصيد بعد منتصف الليل (UTC).'
+            : 'خلص رصيد الزوّار اليومي 🐥 سجّل دخولك عبر Google لرصيد أكبر.',
         isRateLimit: true,
         code: 'TOKEN_QUOTA_EXCEEDED',
         quota: snapshot,

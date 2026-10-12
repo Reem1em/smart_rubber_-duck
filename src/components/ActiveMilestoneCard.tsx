@@ -135,7 +135,7 @@ export const ActiveMilestoneCard: React.FC<ActiveMilestoneCardProps> = ({
           ) : (
             <Target className="w-3.5 h-3.5 shrink-0 mt-0.5" />
           )}
-          <span>🦆 {plan.paceNote}</span>
+          <span>🐥 {plan.paceNote}</span>
         </div>
       )}
 

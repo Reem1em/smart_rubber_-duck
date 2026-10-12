@@ -304,7 +304,7 @@ export const CourseRoadmapPanel: React.FC = () => {
         </div>
 
         <p className="text-xs font-bold text-amber-900 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl p-3">
-          🦆 {roadmap.duckNote}
+          🐥 {roadmap.duckNote}
         </p>
       </div>
 

@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { GoogleIcon, GoogleSignInButton } from './GoogleSignInButton';
 
 export const UPLOAD_SIGN_IN_MESSAGE =
-  'يجب تسجيل الدخول عبر حساب Google أولاً لتتمكني من رفع المادة وحفظ توكناتك ورصيدك اليومي.';
+  'يجب تسجيل الدخول عبر حساب Google أولاً لتتمكن من رفع المادة وحفظ توكناتك ورصيدك اليومي.';
 
 interface SignInRequiredModalProps {
   isOpen: boolean;
@@ -57,7 +57,7 @@ export const SignInRequiredModal: React.FC<SignInRequiredModalProps> = ({ isOpen
             </div>
 
             <h3 id="sign-in-required-title" className="text-lg font-extrabold text-slate-900 dark:text-slate-100">
-              سجّلي دخولك أولاً 🦆
+              سجّل دخولك أولاً 🐥
             </h3>
 
             <p className="p-4 bg-amber-50/70 dark:bg-slate-800 border border-amber-200/80 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-slate-100 text-sm font-bold leading-relaxed">
