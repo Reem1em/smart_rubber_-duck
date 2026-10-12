@@ -191,7 +191,7 @@ function AppContent() {
                 كواكلي (Quakly)
               </h1>
               <p className="text-[11px] font-bold text-amber-900 dark:text-amber-400 hidden lg:block">
-                اشرح بصوتك • اكتشف ثغراتك • اختبر فهمك
+                «اشرح بصوتك • اكتشف ثغراتك • اختبر فهمك»
               </p>
             </div>
           </div>
