@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildCourseChatPrompt, COURSE_CHAT_SYSTEM_INSTRUCTION, sanitizeGrounding, type CourseChatPromptInput } from './courseChat';
+import {
+  buildCourseChatPrompt,
+  COURSE_CHAT_SYSTEM_INSTRUCTION,
+  enforceCitations,
+  sanitizeGrounding,
+  type CourseChatPromptInput,
+} from './courseChat';
 
 const excerpt = {
   source: 'networks.pdf',
@@ -116,5 +122,31 @@ describe('sanitizeGrounding', () => {
     const summaries = [{ name: 'AP', summary: 's', keyPrinciples: ['p'] }];
     expect(sanitizeGrounding({ grounding: 'summaries_only', summaries }).summaries).toHaveLength(1);
     expect(sanitizeGrounding({ grounding: 'slides', excerpts: [excerpt], summaries }).summaries).toEqual([]);
+  });
+});
+
+describe('enforceCitations', () => {
+  const sent = [{ ...excerpt, source: '01- Chapter 1.pdf', slide: 7, part: 2, partCount: 3 }];
+
+  it('keeps a citation whose file and slide were sent, including names with spaces and part labels', () => {
+    const reply = '✅ 📑 (01- Chapter 1.pdf، شريحة 7، جزء 2/3): صحيح';
+    expect(enforceCitations(reply, sent)).toBe(reply);
+  });
+
+  it('keeps the "حسب الشرائح" form when the slide was sent', () => {
+    const reply = '✅ 📑 حسب الشرائح (01- Chapter 1.pdf، شريحة 7): صحيح';
+    expect(enforceCitations(reply, sent)).toBe(reply);
+  });
+
+  it('downgrades multi-slide citations when any slide was not sent', () => {
+    expect(enforceCitations('✅ 📑 (شريحة 7 و 8): x', sent)).toBe('✅ 🌐: x');
+  });
+
+  it('downgrades every 📑 when nothing was sent', () => {
+    expect(enforceCitations('✅ 📑: x\n❌ 📑 (a.pdf، شريحة 1): y', [])).toBe('✅ 🌐: x\n❌ 🌐: y');
+  });
+
+  it('leaves replies without citations untouched', () => {
+    expect(enforceCitations('هلا! 🌐 معلومة عامة', sent)).toBe('هلا! 🌐 معلومة عامة');
   });
 });

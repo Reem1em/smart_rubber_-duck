@@ -285,6 +285,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const saveCourse = async (id: string, mat: MaterialInput, extracted: Concept[]) => {
     try {
       const saved = await courseStore.upsertCourseFromMaterial(id, mat, extracted, ownerId);
+      if (id !== activeCourseId) resetCourseChat();
       setActiveCourseId(id);
       await refreshCourses();
       // Mirror to server for cross-device sync (fire-and-forget).
@@ -320,7 +321,15 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (ownerId && updated) void pushCourseToServer(updated);
   };
 
+  /** Chat state belongs to one course: never carry a concept or pending prompt across courses. */
+  const resetCourseChat = () => {
+    setIsChatOpen(false);
+    setChatConcept(null);
+    setPendingChatPrompt(null);
+  };
+
   const openCourse = (course: SavedCourse) => {
+    if (course.id !== activeCourseId) resetCourseChat();
     setActiveCourseId(course.id);
     setMaterial(course.material);
     setConcepts(course.concepts);
@@ -342,7 +351,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const removeCourse = async (id: string) => {
     await courseStore.deleteCourse(id);
-    if (activeCourseId === id) setActiveCourseId(null);
+    if (activeCourseId === id) {
+      resetCourseChat();
+      setActiveCourseId(null);
+    }
     await refreshCourses();
     // Mirror deletion to server (fire-and-forget).
     if (ownerId) void deleteCourseFromServer(id);
@@ -424,6 +436,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const closeCourseChat = () => {
     setIsChatOpen(false);
+    setChatConcept(null);
     setPendingChatPrompt(null);
   };
 
@@ -498,6 +511,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setFinalDiagnosis(null);
     setError(null);
     setRateLimitModalOpen(false);
+    resetCourseChat();
     setActiveCourseId(null);
   };
 

@@ -16,12 +16,27 @@ import { useAppState } from '../context/AppStateContext';
 import { MathView } from './MathView';
 import { askCourseChat } from '../services/ai';
 import * as chatStore from '../services/chatStore';
-import { expectedSourcesFor, retrieveExcerpts } from '../services/slides/retrieval';
+import {
+  appendToThread,
+  buildCourseChatRequest,
+  extractVerdicts,
+  isThreadFor,
+  type ChatThreadState,
+  type ChatVerdict,
+} from '../services/chatSession';
 import { isRateLimitError } from '../utils/rateLimit';
 import { Concept, CourseChatMessage } from '../types';
 
 /** Turns the model's plain prose into bubbles that still render LaTeX blocks. */
 const newId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+/** Visible verdict chips for a tutor reply that evaluated the student's claims. */
+const VERDICT_CHIPS: Record<ChatVerdict, { label: string; className: string }> = {
+  correct: { label: '✅ صحيح', className: 'text-emerald-800 bg-emerald-50 border-emerald-200' },
+  incorrect: { label: '❌ يحتاج تصحيح', className: 'text-rose-800 bg-rose-50 border-rose-200' },
+  partial: { label: '⚠️ صحيح جزئياً', className: 'text-amber-800 bg-amber-50 border-amber-200' },
+  unclear: { label: '❓ يحتاج توضيح', className: 'text-sky-800 bg-sky-50 border-sky-200' },
+};
 
 /**
  * Slide-over tutor chat, scoped to the active course. History lives under the
@@ -39,24 +54,32 @@ export const CourseChatDrawer: React.FC = () => {
     showRateLimitModal,
   } = useAppState();
 
-  const [messages, setMessages] = useState<CourseChatMessage[]>([]);
+  // The transcript always carries the course it was loaded for (see chatSession.ts).
+  const [thread, setThread] = useState<ChatThreadState>({ courseId: null, messages: [] });
   const [input, setInput] = useState('');
-  const [isSending, setIsSending] = useState(false);
+  /** Course whose request is in flight; "sending" never leaks into another course. */
+  const [sendingCourseId, setSendingCourseId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const courseId = activeCourse?.id ?? null;
+  const currentCourseIdRef = useRef<string | null>(courseId);
+  currentCourseIdRef.current = courseId;
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Swap the transcript whenever the active course changes — never merge them.
+  const threadReady = isThreadFor(thread, courseId);
+  const messages = threadReady ? thread.messages : [];
+  const isSending = !!courseId && sendingCourseId === courseId;
+
+  // Swap the transcript whenever the active course changes — drop the old one at once,
+  // so nothing from the previous course is shown or sent while the new one loads.
   useEffect(() => {
     let cancelled = false;
-    if (!courseId) {
-      setMessages([]);
-      return;
-    }
-    void chatStore.getThread(courseId).then((thread) => {
-      if (!cancelled) setMessages(thread);
+    setThread({ courseId: null, messages: [] });
+    setError(null);
+    if (!courseId) return;
+    void chatStore.getThread(courseId).then((loaded) => {
+      if (!cancelled) setThread({ courseId, messages: loaded });
     });
     return () => {
       cancelled = true;
@@ -67,12 +90,17 @@ export const CourseChatDrawer: React.FC = () => {
     if (isChatOpen) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, isChatOpen]);
 
+  /** Appends to the in-memory transcript only if it still belongs to `forCourseId`. */
+  const appendIfCurrent = (forCourseId: string, message: CourseChatMessage) => {
+    setThread((prev) => appendToThread(prev, forCourseId, message));
+  };
+
   const send = async (text: string, concept: Concept | null) => {
     const course = activeCourse;
     const trimmed = text.trim();
-    if (!course || !trimmed || isSending) return;
+    if (!course || !trimmed || isSending || !isThreadFor(thread, course.id)) return;
 
-    setIsSending(true);
+    setSendingCourseId(course.id);
     setError(null);
 
     const studentTurn: CourseChatMessage = {
@@ -84,78 +112,54 @@ export const CourseChatDrawer: React.FC = () => {
       conceptName: concept?.name,
     };
 
+    // Built from this course only: its own history (earlier turns, not the new message),
+    // its own concept, its own slide excerpts.
+    const request = buildCourseChatRequest({ course, thread, message: trimmed, concept });
+
     // Optimistic render, then persist, so the bubble never lags the tap.
-    const withStudent = [...messages, studentTurn];
-    setMessages(withStudent);
+    appendIfCurrent(course.id, studentTurn);
     setInput('');
     await chatStore.appendMessage(course.id, studentTurn);
 
     try {
-      // Earlier turns only: the current message travels separately as `message`.
-      const priorTurns = messages.slice(-6);
-      const retrieval = retrieveExcerpts({
-        expectedSources: expectedSourcesFor(course),
-        slideSources: course.slideSources,
-        concepts: course.concepts,
-        message: trimmed,
-        priorStudentTurns: priorTurns.filter((m) => m.role === 'student').map((m) => m.text),
-        focusConcept: concept
-          ? { id: concept.id, name: concept.name, keyPrinciples: concept.keyPrinciples }
-          : undefined,
-      });
-
-      const { reply, degraded } = await askCourseChat({
-        courseId: course.id,
-        courseTitle: course.title,
-        conceptNames: course.concepts.map((c) => c.name),
-        message: trimmed,
-        focusConcept: concept
-          ? {
-              name: concept.name,
-              summary: concept.summary,
-              keyPrinciples: concept.keyPrinciples,
-            }
-          : undefined,
-        history: priorTurns.map(({ role, text: t }) => ({ role, text: t })),
-        excerpts: retrieval.excerpts,
-        grounding: retrieval.grounding,
-        unavailableSources: retrieval.unavailableSources,
-        summaries: retrieval.summaries,
-      });
+      const { reply, degraded } = await askCourseChat(request);
 
       const duckTurn: CourseChatMessage = {
         id: newId(),
         role: 'duck',
         text: reply,
         createdAt: Date.now(),
-        conceptId: concept?.id,
-        conceptName: concept?.name,
+        conceptId: request.focusConcept ? concept?.id : undefined,
+        conceptName: request.focusConcept ? concept?.name : undefined,
         degraded,
       };
-      setMessages((prev) => [...prev, duckTurn]);
+      // Persist under the course that asked; show it only if that course is still open.
       await chatStore.appendMessage(course.id, duckTurn);
+      appendIfCurrent(course.id, duckTurn);
     } catch (err: any) {
-      if (isRateLimitError(err)) showRateLimitModal();
-      else setError(err?.message || 'تعذر الوصول إلى كواكلي. حاول مرة ثانية.');
+      if (currentCourseIdRef.current === course.id) {
+        if (isRateLimitError(err)) showRateLimitModal();
+        else setError(err?.message || 'تعذر الوصول إلى كواكلي. حاول مرة ثانية.');
+      }
     } finally {
-      setIsSending(false);
+      setSendingCourseId((prev) => (prev === course.id ? null : prev));
     }
   };
 
-  // A "اشرحه لي" tap seeds the prompt; fire it once the drawer is mounted.
+  // A "اشرحه لي" tap seeds the prompt; fire it once this course's thread has loaded.
   useEffect(() => {
-    if (!isChatOpen || !pendingChatPrompt || !activeCourse || isSending) return;
+    if (!isChatOpen || !pendingChatPrompt || !activeCourse || isSending || !threadReady) return;
     const prompt = pendingChatPrompt;
     consumePendingChatPrompt();
     void send(prompt, chatConcept);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isChatOpen, pendingChatPrompt, activeCourse]);
+  }, [isChatOpen, pendingChatPrompt, activeCourse, threadReady]);
 
   const handleClear = async () => {
     if (!courseId || messages.length === 0) return;
     if (!window.confirm('مسح محادثة هذه المادة بالكامل؟')) return;
     await chatStore.clearThread(courseId);
-    setMessages([]);
+    setThread({ courseId, messages: [] });
   };
 
   return (
@@ -230,7 +234,7 @@ export const CourseChatDrawer: React.FC = () => {
                     كواك! اسألني عن أي مفهوم في «{activeCourse.title}».
                   </p>
                   <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                    أشرح لك بتشبيه من الواقع، وبعدها تشرحه لي بصوتك.
+                    اكتب فهمك لأي مفهوم وأقول لك وش الصح ووش يحتاج تصحيح، مع مرجعه من شرائحك.
                   </p>
                 </div>
               ) : (
@@ -240,6 +244,18 @@ export const CourseChatDrawer: React.FC = () => {
                     className={`flex ${msg.role === 'student' ? 'justify-start' : 'justify-end'}`}
                   >
                     <div className="max-w-[92%] space-y-1.5">
+                      {msg.role === 'duck' && !msg.degraded && extractVerdicts(msg.text).length > 0 && (
+                        <div className="flex flex-wrap justify-end gap-1">
+                          {extractVerdicts(msg.text).map((v) => (
+                            <span
+                              key={v}
+                              className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border ${VERDICT_CHIPS[v].className}`}
+                            >
+                              {VERDICT_CHIPS[v].label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <div
                         className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed border ${
                           msg.role === 'student'
@@ -302,13 +318,13 @@ export const CourseChatDrawer: React.FC = () => {
                     }
                   }}
                   rows={2}
-                  disabled={!activeCourse || isSending}
+                  disabled={!activeCourse || isSending || !threadReady}
                   placeholder="اكتب سؤالك عن أي مفهوم في المادة..."
                   className="flex-1 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm font-medium outline-hidden resize-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 disabled:opacity-50"
                 />
                 <button
                   onClick={() => void send(input, chatConcept)}
-                  disabled={!activeCourse || isSending || !input.trim()}
+                  disabled={!activeCourse || isSending || !threadReady || !input.trim()}
                   title="إرسال"
                   className="p-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white shadow-xs disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.97] transition-all cursor-pointer shrink-0"
                 >

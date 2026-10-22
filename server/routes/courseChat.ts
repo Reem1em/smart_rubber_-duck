@@ -5,6 +5,7 @@ import { handleModelFailure } from '../routeErrors';
 import {
   COURSE_CHAT_SYSTEM_INSTRUCTION,
   buildCourseChatPrompt,
+  enforceCitations,
   sanitizeGrounding,
   CourseChatTurn,
 } from '../prompts/courseChat';
@@ -21,6 +22,17 @@ const normalizeHistory = (raw: unknown): CourseChatTurn[] =>
           text: String(turn.text),
         }))
     : [];
+
+const normalizeFocusConcept = (raw: any) =>
+  raw && typeof raw.name === 'string' && raw.name.trim()
+    ? {
+        name: raw.name.slice(0, 200),
+        summary: typeof raw.summary === 'string' ? raw.summary : undefined,
+        keyPrinciples: Array.isArray(raw.keyPrinciples)
+          ? raw.keyPrinciples.filter((p: unknown): p is string => typeof p === 'string')
+          : undefined,
+      }
+    : undefined;
 
 /**
  * Course-isolated tutor chat.
@@ -60,15 +72,16 @@ export const handleCourseChat = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'اكتب سؤالك أولاً حتى أقدر أشرح لك.' });
     }
 
+    const grounding = sanitizeGrounding(req.body);
     const prompt = buildCourseChatPrompt({
       courseTitle: String(req.body?.courseTitle || 'المادة الدراسية'),
       conceptNames: Array.isArray(req.body?.conceptNames)
         ? req.body.conceptNames.map((n: unknown) => String(n)).filter(Boolean)
         : [],
-      focusConcept: req.body?.focusConcept,
+      focusConcept: normalizeFocusConcept(req.body?.focusConcept),
       history: normalizeHistory(req.body?.history),
       message,
-      ...sanitizeGrounding(req.body),
+      ...grounding,
     });
 
     const response = await generateInteractive({
@@ -80,8 +93,9 @@ export const handleCourseChat = async (req: Request, res: Response) => {
       },
     });
 
-    const reply = String(response.text || '').trim();
-    if (!reply) throw new Error('Empty chat reply');
+    const raw = String(response.text || '').trim();
+    if (!raw) throw new Error('Empty chat reply');
+    const reply = enforceCitations(raw, grounding.excerpts);
 
     return res.json({ reply, degraded: false });
   } catch (err: any) {

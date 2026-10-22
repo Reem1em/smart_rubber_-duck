@@ -253,7 +253,10 @@ export function retrieveExcerpts(input: RetrievalInput): RetrievalResult {
   const usable = sources.filter(
     (s) => (s.status === 'ready' || s.status === 'partial') && input.expectedSources.some((e) => e.sourceId === s.sourceId)
   );
-  const indexed = usable.flatMap((s) => s.chunks.map((c) => indexChunk(c, s.sourceId, s.fileName)));
+  // A chunk must carry its own source's id prefix; anything else is a mis-associated record.
+  const indexed = usable.flatMap((s) =>
+    s.chunks.filter((c) => c.id.startsWith(`${s.sourceId}#`)).map((c) => indexChunk(c, s.sourceId, s.fileName))
+  );
 
   const { terms, bigrams: qBigrams } = buildQuery(input);
 
