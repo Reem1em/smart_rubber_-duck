@@ -13,6 +13,8 @@ import { handleGenerateCodeLab } from './codeLab';
 import { handleGenerateBugChallenge, handleEvaluateBugChallenge } from './bugHunting';
 import { handleReviewProject } from './reviewProject';
 import { handleGenerateDevChallenge, handleEvaluateDevSubmission, handleEvaluateCustomLab } from './devLab';
+import { handleEvaluateQuizAnswer, handleQuizDiscuss } from './quizEval';
+import { handleExtractSlides } from './extractSlides';
 import { handleAuthConfig, handleAuthMe, handleDevAuth, handleGoogleAuth, handleLogout } from './auth';
 import { handleListCourses, handlePutCourse, handleDeleteCourse } from './courses';
 import { quotaGuard } from '../auth/quota';
@@ -48,6 +50,9 @@ export function registerRoutes(app: Express): void {
   // 1. Analyze Uploaded Material & Extract Academic Concepts
   app.post('/api/analyze-material', safe(quotaGuard), safe(handleAnalyzeMaterial));
 
+  // 1a. Extract full slide text of one uploaded file (course-chat reference library)
+  app.post('/api/extract-slides', safe(quotaGuard), safe(handleExtractSlides));
+
   // 2. Diagnose Student Explanation & Calculate Confidence Gap
   app.post('/api/diagnose', safe(quotaGuard), safe(handleDiagnose));
 
@@ -56,6 +61,12 @@ export function registerRoutes(app: Express): void {
 
   // 4. Generate Interactive Quiz Module (5-7 Questions Gradated)
   app.post('/api/generate-quiz', safe(quotaGuard), safe(handleGenerateQuiz));
+
+  // 4a. Evaluate a student's quiz answer in detail
+  app.post('/api/quiz/evaluate-answer', safe(quotaGuard), safe(handleEvaluateQuizAnswer));
+
+  // 4b. Follow-up discussion about an evaluated quiz answer
+  app.post('/api/quiz/discuss', safe(quotaGuard), safe(handleQuizDiscuss));
 
   // 5. Final Diagnostic Evaluation & Mastery Report
   app.post('/api/final-diagnosis', safe(quotaGuard), safe(handleFinalDiagnosis));

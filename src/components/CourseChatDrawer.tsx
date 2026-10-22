@@ -16,6 +16,7 @@ import { useAppState } from '../context/AppStateContext';
 import { MathView } from './MathView';
 import { askCourseChat } from '../services/ai';
 import * as chatStore from '../services/chatStore';
+import { expectedSourcesFor, retrieveExcerpts } from '../services/slides/retrieval';
 import { isRateLimitError } from '../utils/rateLimit';
 import { Concept, CourseChatMessage } from '../types';
 
@@ -90,6 +91,19 @@ export const CourseChatDrawer: React.FC = () => {
     await chatStore.appendMessage(course.id, studentTurn);
 
     try {
+      // Earlier turns only: the current message travels separately as `message`.
+      const priorTurns = messages.slice(-6);
+      const retrieval = retrieveExcerpts({
+        expectedSources: expectedSourcesFor(course),
+        slideSources: course.slideSources,
+        concepts: course.concepts,
+        message: trimmed,
+        priorStudentTurns: priorTurns.filter((m) => m.role === 'student').map((m) => m.text),
+        focusConcept: concept
+          ? { id: concept.id, name: concept.name, keyPrinciples: concept.keyPrinciples }
+          : undefined,
+      });
+
       const { reply, degraded } = await askCourseChat({
         courseId: course.id,
         courseTitle: course.title,
@@ -102,7 +116,11 @@ export const CourseChatDrawer: React.FC = () => {
               keyPrinciples: concept.keyPrinciples,
             }
           : undefined,
-        history: withStudent.slice(-6).map(({ role, text: t }) => ({ role, text: t })),
+        history: priorTurns.map(({ role, text: t }) => ({ role, text: t })),
+        excerpts: retrieval.excerpts,
+        grounding: retrieval.grounding,
+        unavailableSources: retrieval.unavailableSources,
+        summaries: retrieval.summaries,
       });
 
       const duckTurn: CourseChatMessage = {

@@ -5,6 +5,7 @@ import { handleModelFailure } from '../routeErrors';
 import {
   COURSE_CHAT_SYSTEM_INSTRUCTION,
   buildCourseChatPrompt,
+  sanitizeGrounding,
   CourseChatTurn,
 } from '../prompts/courseChat';
 import { courseChatFallback } from '../fallbacks/courseChat';
@@ -67,14 +68,15 @@ export const handleCourseChat = async (req: Request, res: Response) => {
       focusConcept: req.body?.focusConcept,
       history: normalizeHistory(req.body?.history),
       message,
+      ...sanitizeGrounding(req.body),
     });
 
     const response = await generateInteractive({
       contents: prompt,
       config: {
         systemInstruction: COURSE_CHAT_SYSTEM_INSTRUCTION,
-        temperature: 0.8,
-        maxOutputTokens: 700,
+        temperature: 0.4,
+        maxOutputTokens: 1000,
       },
     });
 

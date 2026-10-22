@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAppState } from '../context/AppStateContext';
-import { generateQuiz, generateFinalDiagnosis } from '../services/ai';
+import { generateQuiz, generateFinalDiagnosis, evaluateQuizAnswer, discussQuizAnswer } from '../services/ai';
 import { isRateLimitError } from '../utils/rateLimit';
 import { DuckCharacter } from './DuckCharacter';
 import { MathView } from './MathView';
+import type { QuizAnswerEvaluation, QuizDiscussionMessage, QuizQuestionState } from '../types';
 import {
   HelpCircle,
   CheckCircle2,
@@ -16,8 +17,358 @@ import {
   Award,
   AlertCircle,
   BarChart2,
+  MessageSquare,
+  Send,
+  Info,
+  AlertTriangle,
 } from 'lucide-react';
 
+// ---------------------------------------------------------------------------
+// Per-question evaluation state stored by question index
+// ---------------------------------------------------------------------------
+interface QuestionEvalState {
+  evaluation: QuizAnswerEvaluation | null;
+  questionState: QuizQuestionState;
+  discussionMessages: QuizDiscussionMessage[];
+  discussionError: string | null;
+  isDiscussionLoading: boolean;
+}
+
+function freshEvalState(): QuestionEvalState {
+  return {
+    evaluation: null,
+    questionState: 'ready_for_answer',
+    discussionMessages: [],
+    discussionError: null,
+    isDiscussionLoading: false,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// StatusBadge — visual evaluation status indicator
+// ---------------------------------------------------------------------------
+const STATUS_CONFIG = {
+  correct: {
+    label: 'إجابة صحيحة',
+    bg: 'bg-emerald-50 border-emerald-200',
+    text: 'text-emerald-800',
+    icon: CheckCircle2,
+    iconColor: 'text-emerald-600',
+  },
+  partially_correct: {
+    label: 'إجابة جزئياً صحيحة',
+    bg: 'bg-amber-50 border-amber-200',
+    text: 'text-amber-800',
+    icon: AlertTriangle,
+    iconColor: 'text-amber-500',
+  },
+  incorrect: {
+    label: 'إجابة خاطئة',
+    bg: 'bg-rose-50 border-rose-200',
+    text: 'text-rose-800',
+    icon: XCircle,
+    iconColor: 'text-rose-500',
+  },
+  needs_clarification: {
+    label: 'يحتاج توضيحاً',
+    bg: 'bg-sky-50 border-sky-200',
+    text: 'text-sky-800',
+    icon: HelpCircle,
+    iconColor: 'text-sky-500',
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Collapsible feedback section
+// ---------------------------------------------------------------------------
+const FeedbackSection: React.FC<{
+  title: string;
+  items: string[];
+  variant: 'green' | 'red' | 'amber' | 'slate';
+  icon?: React.ReactNode;
+}> = ({ title, items, variant, icon }) => {
+  if (!items || items.length === 0) return null;
+
+  const variantClasses = {
+    green: 'border-emerald-200 bg-emerald-50/60',
+    red: 'border-rose-200 bg-rose-50/60',
+    amber: 'border-amber-200 bg-amber-50/60',
+    slate: 'border-slate-200 bg-slate-50/60',
+  };
+  const titleClasses = {
+    green: 'text-emerald-800',
+    red: 'text-rose-800',
+    amber: 'text-amber-800',
+    slate: 'text-slate-700',
+  };
+  const bulletClasses = {
+    green: 'bg-emerald-500',
+    red: 'bg-rose-500',
+    amber: 'bg-amber-500',
+    slate: 'bg-slate-400',
+  };
+
+  return (
+    <div className={`rounded-xl border p-3.5 ${variantClasses[variant]}`}>
+      <div className={`font-bold text-sm flex items-center gap-1.5 mb-2 ${titleClasses[variant]}`}>
+        {icon}
+        {title}
+      </div>
+      <ul className="space-y-1.5">
+        {items.map((item, i) => (
+          <li key={i} className="flex items-start gap-2 text-xs sm:text-sm text-slate-800 leading-relaxed">
+            <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${bulletClasses[variant]}`} />
+            <MathView content={item} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// EvaluationPanel — shows after the student selects an answer.
+// `evaluation === null` means the evaluation request is still in flight.
+// ---------------------------------------------------------------------------
+const EvaluationPanel: React.FC<{
+  evaluation: QuizAnswerEvaluation | null;
+  discussionMessages: QuizDiscussionMessage[];
+  discussionError: string | null;
+  isDiscussionLoading: boolean;
+  isFinalizing: boolean;
+  onSendDiscussion: (msg: string) => void;
+  onReadyForNext: () => void;
+  isLastQuestion: boolean;
+}> = ({
+  evaluation,
+  discussionMessages,
+  discussionError,
+  isDiscussionLoading,
+  isFinalizing,
+  onSendDiscussion,
+  onReadyForNext,
+  isLastQuestion,
+}) => {
+  const [discussionInput, setDiscussionInput] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll discussion to bottom
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [discussionMessages.length, isDiscussionLoading]);
+
+  const handleSend = () => {
+    const trimmed = discussionInput.trim();
+    if (!trimmed || isDiscussionLoading) return;
+    onSendDiscussion(trimmed);
+    setDiscussionInput('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Shift+Enter = newline; Enter alone sends only if not loading
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  if (!evaluation) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="p-5 rounded-2xl border border-amber-200 bg-amber-50/70 flex items-center gap-3"
+      >
+        <Loader2 className="w-5 h-5 text-amber-600 animate-spin shrink-0" />
+        <div>
+          <p className="font-bold text-amber-900 text-sm">كواكلي يقيّم إجابتك...</p>
+          <p className="text-amber-700 text-xs mt-0.5">جاري التحليل الأكاديمي الدقيق</p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  const cfg = STATUS_CONFIG[evaluation.status] || STATUS_CONFIG.incorrect;
+  const StatusIcon = cfg.icon;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="space-y-4"
+    >
+      {/* Degraded notice */}
+      {evaluation.degraded && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 text-xs text-slate-600">
+          <Info className="w-4 h-4 shrink-0" />
+          <span>التقييم التفصيلي غير متاح الآن — يتم عرض نتيجة مبسطة.</span>
+        </div>
+      )}
+
+      {/* Status badge */}
+      <div className={`p-4 rounded-2xl border ${cfg.bg} space-y-3`}>
+        <div className={`flex items-center gap-2 font-bold text-base ${cfg.text}`}>
+          <StatusIcon className={`w-5 h-5 ${cfg.iconColor}`} />
+          <span>{cfg.label}</span>
+        </div>
+        <div className={`text-sm leading-relaxed ${cfg.text}`}>
+          <MathView content={evaluation.overall_assessment} />
+        </div>
+      </div>
+
+      {/* Detailed feedback sections */}
+      <FeedbackSection
+        title="ما أصبت فيه"
+        items={evaluation.correct_points}
+        variant="green"
+        icon={<CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+      />
+      <FeedbackSection
+        title="نقاط تحتاج مراجعة"
+        items={evaluation.incorrect_points}
+        variant="red"
+        icon={<XCircle className="w-4 h-4 text-rose-500" />}
+      />
+      <FeedbackSection
+        title="معلومات ناقصة"
+        items={evaluation.missing_points}
+        variant="amber"
+        icon={<AlertTriangle className="w-4 h-4 text-amber-500" />}
+      />
+
+      {/* Full explanation */}
+      {evaluation.explanation && (
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-2">
+          <div className="font-bold text-sm text-indigo-800 flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-indigo-600" />
+            الشرح الأكاديمي
+          </div>
+          <div className="text-xs sm:text-sm text-slate-800 leading-relaxed">
+            <MathView content={evaluation.explanation} />
+          </div>
+        </div>
+      )}
+
+      {/* Suggested correction */}
+      {evaluation.suggested_correction && (
+        <div className="rounded-xl border border-sky-200 bg-sky-50/50 p-3.5 space-y-1.5">
+          <div className="font-bold text-sm text-sky-800 flex items-center gap-1.5">
+            <ArrowLeft className="w-4 h-4 text-sky-600" />
+            الخطوة التالية المقترحة
+          </div>
+          <div className="text-xs sm:text-sm text-slate-800 leading-relaxed">
+            <MathView content={evaluation.suggested_correction} />
+          </div>
+        </div>
+      )}
+
+      {/* ---- Discussion thread ---- */}
+      <div className="border border-slate-200 rounded-2xl overflow-hidden">
+        <div className="flex items-center gap-2 bg-slate-50 border-b border-slate-200 px-4 py-2.5">
+          <MessageSquare className="w-4 h-4 text-slate-500" />
+          <span className="font-bold text-sm text-slate-700">نقاش التقييم مع كواكلي</span>
+          <span className="text-xs text-slate-400 mr-1">يمكنك الاعتراض أو طلب مزيد من الشرح</span>
+        </div>
+
+        {/* Message history */}
+        {discussionMessages.length > 0 && (
+          <div className="max-h-64 overflow-y-auto p-4 space-y-3 bg-white">
+            {discussionMessages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex ${msg.role === 'student' ? 'justify-start' : 'justify-end'}`}
+              >
+                <div
+                  className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                    msg.role === 'student'
+                      ? 'bg-amber-100 text-amber-950 rounded-br-sm'
+                      : 'bg-indigo-100 text-indigo-950 rounded-bl-sm'
+                  }`}
+                >
+                  <MathView content={msg.text} />
+                </div>
+              </div>
+            ))}
+            {isDiscussionLoading && (
+              <div className="flex justify-end">
+                <div className="bg-indigo-50 border border-indigo-200 rounded-2xl rounded-bl-sm px-4 py-2.5 flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                  <span className="text-xs text-indigo-600">كواكلي يفكر...</span>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+
+        {/* Discussion error */}
+        {discussionError && (
+          <div className="px-4 py-2.5 bg-rose-50 border-t border-rose-200 text-xs text-rose-700 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {discussionError}
+          </div>
+        )}
+
+        {/* Input area */}
+        <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-end gap-2">
+          <textarea
+            rows={2}
+            value={discussionInput}
+            onChange={(e) => setDiscussionInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isDiscussionLoading}
+            placeholder="اكتب سؤالاً أو اعتراضاً على التقييم... (Enter للإرسال)"
+            className="flex-1 resize-none rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200 disabled:opacity-60 transition-colors"
+          />
+          <button
+            onClick={handleSend}
+            disabled={!discussionInput.trim() || isDiscussionLoading}
+            className="p-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed shrink-0"
+            title="إرسال"
+            id="quiz-discussion-send-btn"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Advance button */}
+      <div className="flex justify-end pt-1">
+        <button
+          id="quiz-next-question-btn"
+          onClick={onReadyForNext}
+          disabled={isDiscussionLoading || isFinalizing}
+          className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${
+            isDiscussionLoading || isFinalizing
+              ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              : isLastQuestion
+              ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
+              : 'bg-amber-500 hover:bg-amber-600 text-white shadow-sm'
+          }`}
+        >
+          {isLastQuestion ? (
+            <>
+              <Award className="w-4 h-4" />
+              <span>إنهاء الاختبار</span>
+            </>
+          ) : (
+            <>
+              <span>السؤال التالي</span>
+              <ArrowLeft className="w-4 h-4" />
+            </>
+          )}
+        </button>
+      </div>
+    </motion.div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Main QuizPanel
+// ---------------------------------------------------------------------------
 export const QuizPanel: React.FC = () => {
   const {
     material,
@@ -42,8 +393,14 @@ export const QuizPanel: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
-  const [showExplanation, setShowExplanation] = useState<Record<number, boolean>>({});
   const [isFinalizing, setIsFinalizing] = useState(false);
+
+  // Per-question evaluation state keyed by question index
+  const [evalStates, setEvalStates] = useState<Record<number, QuestionEvalState>>({});
+
+  // Ref to track in-flight evaluation so stale responses don't overwrite newer state
+  const evalRequestRef = useRef<{ index: number; version: number } | null>(null);
+  const evalVersion = useRef(0);
 
   // Fetch or generate quiz questions on mount
   useEffect(() => {
@@ -75,40 +432,184 @@ export const QuizPanel: React.FC = () => {
     }
   }, [selectedConcept, quizQuestions.length]);
 
+  // Reset per-question eval states when questions change; invalidate any in-flight
+  // evaluation so a late response can't write into the new quiz.
+  useEffect(() => {
+    evalVersion.current += 1;
+    evalRequestRef.current = null;
+    setEvalStates({});
+    setSelectedAnswers({});
+    setCurrentQuestionIndex(0);
+  }, [quizQuestions]);
+
+  // ----- Helper for updating per-question eval state -----
+  const updateEvalState = (index: number, patch: Partial<QuestionEvalState>) => {
+    setEvalStates((prev) => ({
+      ...prev,
+      [index]: { ...(prev[index] ?? freshEvalState()), ...patch },
+    }));
+  };
+
   if (!selectedConcept) return null;
 
   const currentQuestion = quizQuestions[currentQuestionIndex];
   const totalQuestions = quizQuestions.length;
+  const currentEvalState = evalStates[currentQuestionIndex] ?? freshEvalState();
+  const isCurrentAnswered = selectedAnswers[currentQuestionIndex] !== undefined;
+  const isAllAnswered = Object.keys(selectedAnswers).length === totalQuestions;
 
-  const handleSelectOption = (optionIndex: number) => {
-    if (selectedAnswers[currentQuestionIndex] !== undefined) return; // Answered already
+  /** Client-side evaluation used when the API is unreachable; the verdict follows the answer key. */
+  const buildLocalEvaluation = (isCorrect: boolean, overallAssessment: string): QuizAnswerEvaluation => ({
+    status: isCorrect ? 'correct' : 'incorrect',
+    overall_assessment: overallAssessment,
+    correct_points: isCorrect ? ['اخترت الإجابة الصحيحة'] : [],
+    incorrect_points: isCorrect ? [] : ['الإجابة المختارة ليست الصحيحة'],
+    missing_points: [],
+    explanation: currentQuestion.explanation || '',
+    suggested_correction: '',
+    needs_clarification: false,
+    degraded: true,
+  });
 
-    const newAnswers = { ...selectedAnswers, [currentQuestionIndex]: optionIndex };
-    setSelectedAnswers(newAnswers);
-    setShowExplanation({ ...showExplanation, [currentQuestionIndex]: true });
+  // ----- Answer selection + evaluation trigger -----
+  const handleSelectOption = async (optionIndex: number) => {
+    if (selectedAnswers[currentQuestionIndex] !== undefined) return; // already answered
+    if (currentEvalState.questionState !== 'ready_for_answer') return; // guard
 
-    // Duck reaction based on correctness
+    // Lock in the answer immediately
+    setSelectedAnswers({ ...selectedAnswers, [currentQuestionIndex]: optionIndex });
+    updateEvalState(currentQuestionIndex, { questionState: 'evaluating' });
+
+    // The grade is decided by the answer key alone.
     const isCorrect = optionIndex === currentQuestion.correctAnswerIndex;
-    if (isCorrect) {
-      setDuckState('proud');
-    } else {
-      setDuckState('quizzical');
+    setDuckState(isCorrect ? 'proud' : 'quizzical');
+
+    // Track this specific request so stale responses can be detected
+    const myIndex = currentQuestionIndex;
+    const myVersion = ++evalVersion.current;
+    evalRequestRef.current = { index: myIndex, version: myVersion };
+    const isStale = () =>
+      evalRequestRef.current?.index !== myIndex || evalRequestRef.current?.version !== myVersion;
+
+    try {
+      const evaluation = await evaluateQuizAnswer(
+        currentQuestion,
+        optionIndex,
+        selectedConcept,
+        material?.rawText
+      );
+      if (isStale()) return;
+
+      updateEvalState(myIndex, { evaluation, questionState: 'feedback_available' });
+    } catch (err: any) {
+      if (isStale()) return;
+
+      if (isRateLimitError(err)) {
+        showRateLimitModal();
+        updateEvalState(myIndex, {
+          evaluation: buildLocalEvaluation(
+            isCorrect,
+            isCorrect ? 'أحسنت! اخترت الإجابة الصحيحة.' : 'الإجابة المختارة غير صحيحة.'
+          ),
+          questionState: 'feedback_available',
+        });
+      } else {
+        updateEvalState(myIndex, {
+          evaluation: buildLocalEvaluation(
+            isCorrect,
+            'تعذّر إعداد التقييم التفصيلي الآن. الشرح المرجعي متاح أدناه.'
+          ),
+          questionState: 'feedback_available',
+          discussionError: 'حدث خطأ أثناء التقييم. يمكنك مواصلة النقاش أو الانتقال للسؤال التالي.',
+        });
+      }
     }
   };
 
-  const handleNext = () => {
+  // ----- Discussion send (never re-grades, never advances) -----
+  const handleSendDiscussion = async (message: string) => {
+    const myIndex = currentQuestionIndex;
+    const state = evalStates[myIndex] ?? freshEvalState();
+    if (!state.evaluation || state.isDiscussionLoading) return;
+
+    const studentMsg: QuizDiscussionMessage = {
+      id: `${myIndex}-${Date.now()}-student`,
+      role: 'student',
+      text: message,
+      timestamp: Date.now(),
+    };
+
+    const priorHistory = state.discussionMessages;
+    const withStudent = [...priorHistory, studentMsg];
+
+    updateEvalState(myIndex, {
+      discussionMessages: withStudent,
+      isDiscussionLoading: true,
+      discussionError: null,
+      questionState: 'discussion_active',
+    });
+
+    try {
+      const result = await discussQuizAnswer({
+        question: currentQuestion,
+        studentAnswerIndex: selectedAnswers[myIndex],
+        concept: selectedConcept,
+        previousEvaluation: state.evaluation,
+        // Earlier turns only — the new message travels separately as `newMessage`.
+        conversationHistory: priorHistory.map((m) => ({ role: m.role, text: m.text })),
+        newMessage: message,
+      });
+
+      const tutorMsg: QuizDiscussionMessage = {
+        id: `${myIndex}-${Date.now()}-tutor`,
+        role: 'tutor',
+        text: result.reply,
+        timestamp: Date.now(),
+      };
+
+      updateEvalState(myIndex, {
+        discussionMessages: [...withStudent, tutorMsg],
+        isDiscussionLoading: false,
+        questionState: 'feedback_available',
+      });
+    } catch (err: any) {
+      if (isRateLimitError(err)) showRateLimitModal();
+      updateEvalState(myIndex, {
+        isDiscussionLoading: false,
+        discussionError: isRateLimitError(err)
+          ? 'حد الاستخدام وصل. يرجى المحاولة لاحقاً.'
+          : 'تعذّر إرسال الرسالة. يرجى المحاولة مرة أخرى.',
+        questionState: 'feedback_available',
+      });
+    }
+  };
+
+  // ----- Explicit "ready for next" -----
+  const handleReadyForNext = () => {
+    if (
+      currentEvalState.questionState === 'evaluating' ||
+      currentEvalState.isDiscussionLoading
+    )
+      return;
+
     if (currentQuestionIndex < totalQuestions - 1) {
+      updateEvalState(currentQuestionIndex, { questionState: 'ready_for_next' });
       setCurrentQuestionIndex((prev) => prev + 1);
       setDuckState('encouraging');
+    } else {
+      // Last question → finalize
+      handleFinishQuiz();
     }
   };
 
+  // ----- Navigation (prev) -----
   const handlePrev = () => {
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex((prev) => prev - 1);
     }
   };
 
+  // ----- Finish quiz -----
   const handleFinishQuiz = async () => {
     if (isFinalizing) return;
     setIsFinalizing(true);
@@ -116,12 +617,9 @@ export const QuizPanel: React.FC = () => {
     setDuckState('thinking');
 
     try {
-      // Calculate total score
       let score = 0;
       quizQuestions.forEach((q, idx) => {
-        if (selectedAnswers[idx] === q.correctAnswerIndex) {
-          score += 1;
-        }
+        if (selectedAnswers[idx] === q.correctAnswerIndex) score += 1;
       });
 
       const res = {
@@ -146,18 +644,16 @@ export const QuizPanel: React.FC = () => {
           setDuckState(finalResult.duckMood || 'proud');
         } catch (err: any) {
           console.error('Error generating final diagnosis:', err);
-          if (isRateLimitError(err)) {
-            showRateLimitModal();
-          }
+          if (isRateLimitError(err)) showRateLimitModal();
           setError('حدث خطأ أثناء إعداد التقرير النهائي، تم استخدام التقرير التلقائي للنتيجة.');
-          // Report built from the client-graded quiz only; unrated when there was no quiz.
           const scorePercent = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : null;
           setFinalDiagnosis({
             masteryScore: scorePercent,
             gapResolved: scorePercent !== null && scorePercent >= 60,
-            duckVerdict: scorePercent === null
-              ? 'كواك! ما قدرت أجهّز التقرير الحين — جرّب مرة ثانية بعد شوي.'
-              : `كواك! هذا التقرير مبني على نتيجة اختبارك القصير فقط (${scorePercent}%).`,
+            duckVerdict:
+              scorePercent === null
+                ? 'كواك! ما قدرت أجهّز التقرير الحين — جرّب مرة ثانية بعد شوي.'
+                : `كواك! هذا التقرير مبني على نتيجة اختبارك القصير فقط (${scorePercent}%).`,
             duckMood: scorePercent !== null && scorePercent >= 60 ? 'proud' : 'encouraging',
             detailedAnalysis: {
               initialConfidence: diagnosis.statedConfidence,
@@ -173,9 +669,10 @@ export const QuizPanel: React.FC = () => {
         setFinalDiagnosis({
           masteryScore: scorePercent,
           gapResolved: scorePercent !== null && scorePercent >= 60,
-          duckVerdict: scorePercent === null
-            ? 'أحسنت في إنهاء الجلسة!'
-            : `أحسنت في إنهاء الاختبار — نتيجتك ${scorePercent}%.`,
+          duckVerdict:
+            scorePercent === null
+              ? 'أحسنت في إنهاء الجلسة!'
+              : `أحسنت في إنهاء الاختبار — نتيجتك ${scorePercent}%.`,
           duckMood: scorePercent !== null && scorePercent >= 60 ? 'proud' : 'encouraging',
           detailedAnalysis: {
             initialConfidence: diagnosis?.statedConfidence ?? null,
@@ -207,6 +704,7 @@ export const QuizPanel: React.FC = () => {
     return { label: 'مستوى متقدم وعميق', color: 'bg-indigo-100 text-indigo-900 border-indigo-300' };
   };
 
+  // ----- Loading skeleton -----
   if (isLoading) {
     return (
       <div className="max-w-2xl mx-auto p-4 sm:p-6 lg:p-8 text-center space-y-6">
@@ -235,9 +733,26 @@ export const QuizPanel: React.FC = () => {
     );
   }
 
-  const isCurrentAnswered = selectedAnswers[currentQuestionIndex] !== undefined;
-  const isAllAnswered = Object.keys(selectedAnswers).length === totalQuestions;
+  const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
   const diffBadge = getDifficultyBadge(currentQuestion?.difficulty || '');
+  // Once answered, the feedback stays visible — including when the student comes back
+  // to a question they already moved past (state `ready_for_next`).
+  const showEvaluationPanel = isCurrentAnswered;
+  const isEvaluating = currentEvalState.questionState === 'evaluating';
+
+  // Duck message depends on state
+  const duckMessage = (() => {
+    if (currentEvalState.questionState === 'evaluating') {
+      return 'جاري تقييم إجابتك بدقة أكاديمية...';
+    }
+    if (currentEvalState.evaluation) {
+      const s = currentEvalState.evaluation.status;
+      if (s === 'correct') return 'أحسنت القول والإجابة! بيان دقيق وفهم سديد.';
+      if (s === 'partially_correct') return 'فيك صح وفيك يحتاج مراجعة — تأمل الشرح التفصيلي.';
+      return 'تأمل الخيار الصحيح وتعليله لتستدرك المعنى الدقيق.';
+    }
+    return `السؤال ${currentQuestionIndex + 1} من ${totalQuestions}: اقرأ الخيارات بتأنٍ ثم اختر الإجابة الدقيقة.`;
+  })();
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
@@ -272,19 +787,15 @@ export const QuizPanel: React.FC = () => {
       <div className="flex justify-center py-1">
         <DuckCharacter
           state={
-            isCurrentAnswered
-              ? selectedAnswers[currentQuestionIndex] === currentQuestion.correctAnswerIndex
+            currentEvalState.questionState === 'evaluating'
+              ? 'thinking'
+              : currentEvalState.evaluation
+              ? currentEvalState.evaluation.status === 'correct'
                 ? 'proud'
                 : 'quizzical'
               : 'encouraging'
           }
-          message={
-            isCurrentAnswered
-              ? selectedAnswers[currentQuestionIndex] === currentQuestion.correctAnswerIndex
-                ? 'أحسنت القول والإجابة! بيان دقيق وفهم سديد.'
-                : 'تأمل الخيار الصحيح وتعليله لتستدرك المعنى الدقيق.'
-              : `السؤال ${currentQuestionIndex + 1} من ${totalQuestions}: اقرأ الخيارات بتأنٍ ثم اختر الإجابة الدقيقة.`
-          }
+          message={duckMessage}
         />
       </div>
 
@@ -303,6 +814,8 @@ export const QuizPanel: React.FC = () => {
           {quizQuestions.map((_, idx) => {
             const isAnswered = selectedAnswers[idx] !== undefined;
             const isCorrect = selectedAnswers[idx] === quizQuestions[idx].correctAnswerIndex;
+            const evalState = evalStates[idx];
+            const isDotEvaluating = evalState?.questionState === 'evaluating';
             return (
               <div
                 key={idx}
@@ -311,6 +824,8 @@ export const QuizPanel: React.FC = () => {
                     ? idx === currentQuestionIndex
                       ? 'bg-amber-400 animate-pulse'
                       : 'bg-slate-200'
+                    : isDotEvaluating
+                    ? 'bg-amber-300 animate-pulse'
                     : isCorrect
                     ? 'bg-emerald-500'
                     : 'bg-rose-400'
@@ -357,13 +872,20 @@ export const QuizPanel: React.FC = () => {
               const isSelected = selectedAnswers[currentQuestionIndex] === optIdx;
               const isCorrectOpt = optIdx === currentQuestion.correctAnswerIndex;
               const isAnswered = selectedAnswers[currentQuestionIndex] !== undefined;
+              const evaluationDone = currentEvalState.evaluation !== null;
 
-              let btnStyle = 'border-slate-200 bg-white hover:border-amber-400 hover:bg-amber-50/50 text-slate-800';
+              let btnStyle =
+                'border-slate-200 bg-white hover:border-amber-400 hover:bg-amber-50/50 text-slate-800';
               if (isAnswered) {
-                if (isCorrectOpt) {
-                  btnStyle = 'border-emerald-500 bg-emerald-50 text-emerald-900 font-bold ring-2 ring-emerald-400/30';
-                } else if (isSelected) {
+                if (isCorrectOpt && evaluationDone) {
+                  btnStyle =
+                    'border-emerald-500 bg-emerald-50 text-emerald-900 font-bold ring-2 ring-emerald-400/30';
+                } else if (isSelected && !isCorrectOpt && evaluationDone) {
                   btnStyle = 'border-rose-400 bg-rose-50 text-rose-900 font-medium';
+                } else if (isAnswered && !evaluationDone) {
+                  btnStyle = isSelected
+                    ? 'border-amber-400 bg-amber-50/70 text-slate-800 font-medium'
+                    : 'border-slate-100 bg-slate-50 opacity-60 text-slate-500';
                 } else {
                   btnStyle = 'border-slate-100 bg-slate-50 opacity-60 text-slate-500';
                 }
@@ -372,6 +894,7 @@ export const QuizPanel: React.FC = () => {
               return (
                 <button
                   key={optIdx}
+                  id={`quiz-option-${currentQuestionIndex}-${optIdx}`}
                   onClick={() => handleSelectOption(optIdx)}
                   disabled={isAnswered}
                   className={`w-full text-right p-4 rounded-xl border text-sm sm:text-base transition-all flex items-center justify-between gap-3 ${btnStyle}`}
@@ -391,90 +914,66 @@ export const QuizPanel: React.FC = () => {
                     </div>
                   </div>
 
-                  {isAnswered && isCorrectOpt && (
+                  {isAnswered && isCorrectOpt && currentEvalState.evaluation && (
                     <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                   )}
-                  {isAnswered && isSelected && !isCorrectOpt && (
+                  {isAnswered && isSelected && !isCorrectOpt && currentEvalState.evaluation && (
                     <XCircle className="w-5 h-5 text-rose-500 shrink-0" />
+                  )}
+                  {isAnswered && currentEvalState.questionState === 'evaluating' && isSelected && (
+                    <Loader2 className="w-4 h-4 text-amber-500 animate-spin shrink-0" />
                   )}
                 </button>
               );
             })}
           </div>
 
-          {/* Explanation Box after selection */}
-          {isCurrentAnswered && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`p-4 rounded-xl border text-sm space-y-1.5 ${
-                selectedAnswers[currentQuestionIndex] === currentQuestion.correctAnswerIndex
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
-                  : 'bg-amber-50 border-amber-200 text-amber-950'
-              }`}
-            >
-              <div className="font-bold flex items-center gap-1.5 text-base">
-                <Sparkles className="w-4 h-4 text-amber-600" />
-                <span>تعليل البطة :</span>
-              </div>
-              <div className="leading-relaxed text-xs sm:text-sm">
-                <MathView content={currentQuestion.explanation} />
-              </div>
-            </motion.div>
+          {/* Evaluation + Discussion Panel (shown after selection; loader while evaluating) */}
+          {showEvaluationPanel && (
+            <EvaluationPanel
+              evaluation={currentEvalState.evaluation}
+              discussionMessages={currentEvalState.discussionMessages}
+              discussionError={currentEvalState.discussionError}
+              isDiscussionLoading={currentEvalState.isDiscussionLoading}
+              isFinalizing={isFinalizing}
+              onSendDiscussion={handleSendDiscussion}
+              onReadyForNext={handleReadyForNext}
+              isLastQuestion={isLastQuestion}
+            />
           )}
 
-          {/* Navigation controls */}
-          <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-            <button
-              onClick={handlePrev}
-              disabled={currentQuestionIndex === 0}
-              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                currentQuestionIndex === 0
-                  ? 'text-slate-300 cursor-not-allowed'
-                  : 'text-slate-700 bg-slate-100 hover:bg-slate-200'
-              }`}
-            >
-              <ArrowRight className="w-4 h-4" />
-              <span>السؤال السابق</span>
-            </button>
+          {/* Back navigation (forward is the explicit button inside the evaluation panel) */}
+          {!isEvaluating && (
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+              <button
+                id="quiz-prev-btn"
+                onClick={handlePrev}
+                disabled={currentQuestionIndex === 0 || currentEvalState.isDiscussionLoading}
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                  currentQuestionIndex === 0 || currentEvalState.isDiscussionLoading
+                    ? 'text-slate-300 cursor-not-allowed'
+                    : 'text-slate-700 bg-slate-100 hover:bg-slate-200'
+                }`}
+              >
+                <ArrowRight className="w-4 h-4" />
+                <span>السؤال السابق</span>
+              </button>
 
-            {currentQuestionIndex < totalQuestions - 1 ? (
-              <button
-                onClick={handleNext}
-                disabled={!isCurrentAnswered}
-                className={`inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white shadow-sm transition-all ${
-                  !isCurrentAnswered
-                    ? 'bg-slate-300 cursor-not-allowed'
-                    : 'bg-amber-500 hover:bg-amber-600'
-                }`}
-              >
-                <span>السؤال التالي</span>
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                onClick={handleFinishQuiz}
-                disabled={!isAllAnswered || isFinalizing}
-                className={`inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-white shadow-md transition-all ${
-                  !isAllAnswered || isFinalizing
-                    ? 'bg-slate-300 cursor-not-allowed'
-                    : 'bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99]'
-                }`}
-              >
-                {isFinalizing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>جاري إعداد التقرير النهائي...</span>
-                  </>
-                ) : (
-                  <>
-                    <Award className="w-5 h-5" />
-                    <span>إنهاء الاختبار والانتقال للتقرير الشامل</span>
-                  </>
-                )}
-              </button>
-            )}
-          </div>
+              {!isCurrentAnswered && (
+                <span className="text-xs text-slate-400 italic">اختر إجابة للمتابعة</span>
+              )}
+            </div>
+          )}
+
+          {/* Finalize button when last question is answered but evaluation pending */}
+          {isLastQuestion && isAllAnswered && isFinalizing && (
+            <div className="flex justify-center pt-4">
+              <div className="flex items-center gap-2 text-slate-600 text-sm font-bold">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>جاري إعداد التقرير النهائي...</span>
+              </div>
+            </div>
+          )}
         </motion.div>
       </AnimatePresence>
     </div>

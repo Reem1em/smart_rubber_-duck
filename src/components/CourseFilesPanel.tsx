@@ -4,8 +4,9 @@ import { useAppState } from '../context/AppStateContext';
 import { analyzeMaterial } from '../services/ai';
 import { hashFile } from '../services/courseStore';
 import { formatBytes } from '../utils/formatBytes';
-import { CourseFile, SavedCourse } from '../types';
+import { CourseFile, MaterialInput, SavedCourse, SlideSource } from '../types';
 import {
+  RefreshCw,
   Trash2,
   Loader2,
   CheckCircle2,
@@ -26,6 +27,7 @@ type UploadState =
   | { phase: 'idle' }
   | { phase: 'hashing' }
   | { phase: 'duplicate'; fileName: string }
+  | { phase: 'reextracting'; fileName: string }
   | { phase: 'analyzing'; fileName: string; progress: number }
   | { phase: 'done'; fileName: string; count: number }
   | { phase: 'error'; message: string };
@@ -38,8 +40,63 @@ function formatDate(ts: number): string {
   }).format(new Date(ts));
 }
 
+/** Reads a picked file into the MaterialInput shape the AI endpoints expect. */
+async function readMaterial(file: File): Promise<MaterialInput> {
+  const mimeType = file.type || 'application/octet-stream';
+  const isText = mimeType.startsWith('text/') || file.name.endsWith('.txt');
+  if (isText) {
+    const rawText = await file.text();
+    return { fileName: file.name, fileSize: file.size, fileType: file.type, rawText };
+  }
+  const buf = await file.arrayBuffer();
+  const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+  return { fileName: file.name, fileSize: file.size, fileType: file.type, base64Data: b64, mimeType };
+}
+
+/** Slide-text status chip for one source file (course-chat reference library). */
+const SlideStatusBadge: React.FC<{ source?: SlideSource; extracting: boolean }> = ({ source, extracting }) => {
+  const base = 'text-[11px] font-bold px-1.5 py-0.5 rounded-md border';
+  if (extracting) {
+    return (
+      <span className={`${base} text-sky-700 bg-sky-50 border-sky-200 inline-flex items-center gap-1`}>
+        <Loader2 className="w-2.5 h-2.5 animate-spin" /> يستخرج نص الشرائح
+      </span>
+    );
+  }
+  if (!source) {
+    return <span className={`${base} text-slate-600 bg-slate-50 border-slate-200`}>نص الشرائح غير مستخرج</span>;
+  }
+  switch (source.status) {
+    case 'ready':
+      return <span className={`${base} text-emerald-700 bg-emerald-50 border-emerald-200`}>📑 نص الشرائح جاهز</span>;
+    case 'partial':
+      return (
+        <span className={`${base} text-amber-800 bg-amber-50 border-amber-200`} title={source.error}>
+          📑 نص الشرائح جزئي
+        </span>
+      );
+    case 'unsupported':
+      return (
+        <span className={`${base} text-slate-700 bg-slate-100 border-slate-300`} title={source.error}>
+          غير مدعوم — صدّره PDF
+        </span>
+      );
+    default:
+      return (
+        <span className={`${base} text-rose-700 bg-rose-50 border-rose-200`} title={source.error}>
+          تعذّر استخراج نص الشرائح
+        </span>
+      );
+  }
+};
+
+/** Missing, failed or partial slide text can be (re)extracted; ready/unsupported cannot. */
+const needsExtraction = (source?: SlideSource) =>
+  !source || source.status === 'failed' || source.status === 'partial';
+
 export const CourseFilesPanel: React.FC<Props> = ({ course }) => {
-  const { addChapterToCourse, removeChapterFromCourse } = useAppState();
+  const { addChapterToCourse, removeChapterFromCourse, extractCourseSlides, extractingSlideSourceIds } =
+    useAppState();
 
   const [uploadState, setUploadState] = useState<UploadState>({ phase: 'idle' });
   const [isDragging, setIsDragging] = useState(false);
@@ -47,6 +104,22 @@ export const CourseFilesPanel: React.FC<Props> = ({ course }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const files: CourseFile[] = course.files ?? [];
+  const sourceFor = (sourceId: string) => (course.slideSources ?? []).find((s) => s.sourceId === sourceId);
+  const conceptsOfChapter = (fileId: string) =>
+    course.concepts.filter((c) => c.chapterOrUnit?.startsWith(`${fileId}::`));
+  const primarySource = sourceFor(course.id);
+  const primaryHasBytes = !!(course.material?.base64Data || course.material?.rawText);
+  const isPrimaryExtracting = extractingSlideSourceIds.includes(course.id);
+
+  const reprocessPrimary = () => {
+    if (!primaryHasBytes) return;
+    void extractCourseSlides(
+      course.id,
+      course.id,
+      course.material,
+      course.concepts.filter((c) => !c.chapterOrUnit?.includes('::'))
+    );
+  };
 
   /* ------------------------------------------------------------------ */
   /* Upload pipeline                                                       */
@@ -59,31 +132,22 @@ export const CourseFilesPanel: React.FC<Props> = ({ course }) => {
       // 1. Fingerprint the file content.
       const fileId = await hashFile(file);
 
-      // 2. Dedup: already in the repository?
+      // 2. Dedup: already in the repository? Concepts are never re-analyzed, but a chapter
+      //    whose slide text is missing / failed / partial gets its extraction (re)run.
       if ((course.files ?? []).some((f) => f.id === fileId)) {
-        setUploadState({ phase: 'duplicate', fileName: file.name });
+        if (needsExtraction(sourceFor(fileId))) {
+          const material = await readMaterial(file);
+          void extractCourseSlides(course.id, fileId, material, conceptsOfChapter(fileId));
+          setUploadState({ phase: 'reextracting', fileName: file.name });
+        } else {
+          setUploadState({ phase: 'duplicate', fileName: file.name });
+        }
         setTimeout(() => setUploadState({ phase: 'idle' }), 4000);
         return;
       }
 
       // 3. Read into MaterialInput.
-      const mimeType = file.type || 'application/octet-stream';
-      const isText = mimeType.startsWith('text/') || file.name.endsWith('.txt');
-      let material;
-      if (isText) {
-        const rawText = await file.text();
-        material = { fileName: file.name, fileSize: file.size, fileType: file.type, rawText };
-      } else {
-        const buf = await file.arrayBuffer();
-        const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-        material = {
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type,
-          base64Data: b64,
-          mimeType,
-        };
-      }
+      const material = await readMaterial(file);
 
       setUploadState({ phase: 'analyzing', fileName: file.name, progress: 0 });
 
@@ -117,6 +181,8 @@ export const CourseFilesPanel: React.FC<Props> = ({ course }) => {
         } else {
           setUploadState({ phase: 'done', fileName: file.name, count: extracted.length });
           setTimeout(() => setUploadState({ phase: 'idle' }), 5000);
+          // Slide text while the bytes are still in memory (they are not stored).
+          void extractCourseSlides(course.id, fileId, material, extracted);
         }
       } catch (err: any) {
         clearInterval(timer);
@@ -124,7 +190,7 @@ export const CourseFilesPanel: React.FC<Props> = ({ course }) => {
         setTimeout(() => setUploadState({ phase: 'idle' }), 6000);
       }
     },
-    [course.id, course.files, addChapterToCourse]
+    [course.id, course.files, course.slideSources, course.concepts, addChapterToCourse, extractCourseSlides]
   );
 
   const handleDrop = useCallback(
@@ -244,11 +310,37 @@ export const CourseFilesPanel: React.FC<Props> = ({ course }) => {
           </div>
         )}
 
+        {uploadState.phase === 'reextracting' && (
+          <div className="flex flex-col items-center gap-2 text-sky-700">
+            <RefreshCw className="w-6 h-6" />
+            <p className="text-sm font-bold">الملف موجود — جاري استخراج نص شرائحه فقط</p>
+            <p className="text-xs text-slate-500">«{uploadState.fileName}»</p>
+          </div>
+        )}
+
         {uploadState.phase === 'error' && (
           <div className="flex flex-col items-center gap-2 text-rose-600">
             <AlertCircle className="w-6 h-6" />
             <p className="text-sm font-bold">{uploadState.message}</p>
           </div>
+        )}
+      </div>
+
+      {/* Primary material: slide-text status + reprocess (its bytes are stored with the course) */}
+      <div className="bg-white border border-slate-200 rounded-xl p-3.5 flex flex-wrap items-center gap-2">
+        <FileText className="w-4 h-4 text-amber-700 shrink-0" />
+        <span className="text-sm font-bold text-slate-900 truncate max-w-[60%]">{course.fileName}</span>
+        <SlideStatusBadge source={primarySource} extracting={isPrimaryExtracting} />
+        {primaryHasBytes && needsExtraction(primarySource) && !isPrimaryExtracting && (
+          <button
+            onClick={reprocessPrimary}
+            className="ms-auto inline-flex items-center gap-1 text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 hover:bg-amber-100 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+          >
+            <RefreshCw className="w-3 h-3" /> إعادة المعالجة
+          </button>
+        )}
+        {primarySource?.error && primarySource.status !== 'ready' && (
+          <p className="w-full text-[11px] text-slate-500">{primarySource.error}</p>
         )}
       </div>
 
@@ -304,7 +396,14 @@ export const CourseFilesPanel: React.FC<Props> = ({ course }) => {
                           ❌ خطأ
                         </span>
                       )}
+                      <SlideStatusBadge source={sourceFor(f.id)} extracting={extractingSlideSourceIds.includes(f.id)} />
                     </div>
+                    {needsExtraction(sourceFor(f.id)) && !extractingSlideSourceIds.includes(f.id) && (
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        {sourceFor(f.id)?.error ? `${sourceFor(f.id)?.error} ` : ''}
+                        لإكمال نص الشرائح أعد اختيار الملف نفسه من المنطقة أعلاه — لن يُعاد تحليل المفاهيم.
+                      </p>
+                    )}
                   </div>
 
                   {!isDeleting ? (

@@ -73,6 +73,55 @@ export interface SavedCourse {
    * Absent on legacy single-file courses (treated as empty array).
    */
   files?: CourseFile[];
+  /**
+   * Extracted slide text, one entry per source file (primary material + each chapter).
+   * Absent on courses created before slide extraction existed.
+   */
+  slideSources?: SlideSource[];
+}
+
+/** One retrievable piece of a slide. Long slides become several parts; nothing is dropped. */
+export interface SlideChunk {
+  /** `${sourceId}#s${slideIndex}p${part}` — unique within the course. */
+  id: string;
+  /** Page/slide number in the file (1-based). */
+  slideIndex: number;
+  /** 1-based part within the slide. */
+  part: number;
+  /** Total parts for this slide; siblings share `slideIndex`. */
+  partCount: number;
+  /** Slide title as printed (repeated on every part). */
+  heading: string;
+  /** Near-verbatim slide text for this part. */
+  text: string;
+  /** Text rendering of readable labels / tables / diagram relations (part 1 only). */
+  visual?: string;
+  /** Bilingual key terms (original language + Arabic), shared by all parts. */
+  keywords: string[];
+  /** Linked concept ids (validated against the course), shared by all parts. */
+  conceptIds: string[];
+  /** The model flagged unreadable content on this slide. */
+  incomplete?: boolean;
+}
+
+export type SlideSourceStatus = 'ready' | 'partial' | 'failed' | 'unsupported';
+
+export interface SlideSource {
+  /** CourseFile.id, or the course id for the primary material. */
+  sourceId: string;
+  fileName: string;
+  /** 'partial' when any slide is incomplete or the document was not fully transcribed. */
+  status: SlideSourceStatus;
+  chunks: SlideChunk[];
+  /** Slides actually transcribed. */
+  slideCount: number;
+  /** Slides with unreadable parts. */
+  incompleteSlides: number[];
+  /** Set when transcription stopped before the end of the document. */
+  truncatedAfterSlide?: number;
+  extractedAt: number;
+  /** Student-safe Arabic reason for partial / failed / unsupported. */
+  error?: string;
 }
 
 /** Signed-in student profile returned by POST /api/auth/google. */
@@ -153,6 +202,46 @@ export interface QuizResult {
   totalQuestions: number;
   userAnswers: number[];
 }
+
+/**
+ * Detailed answer evaluation returned by /api/quiz/evaluate-answer.
+ * Maps directly to the Gemini structured output schema.
+ */
+export interface QuizAnswerEvaluation {
+  status: 'correct' | 'partially_correct' | 'incorrect' | 'needs_clarification';
+  overall_assessment: string;
+  correct_points: string[];
+  incorrect_points: string[];
+  missing_points: string[];
+  explanation: string;
+  suggested_correction: string;
+  needs_clarification: boolean;
+  /** True when the evaluation was served from the offline fallback. */
+  degraded?: boolean;
+}
+
+/** One turn in the per-question discussion thread. */
+export interface QuizDiscussionMessage {
+  id: string;
+  role: 'student' | 'tutor';
+  text: string;
+  timestamp: number;
+}
+
+/**
+ * Lifecycle state for a single quiz question.
+ * - ready_for_answer   : question shown, waiting for selection
+ * - evaluating         : request in flight to /api/quiz/evaluate-answer
+ * - feedback_available : evaluation returned; student reads feedback
+ * - discussion_active  : student is typing a follow-up
+ * - ready_for_next     : student explicitly ready to advance
+ */
+export type QuizQuestionState =
+  | 'ready_for_answer'
+  | 'evaluating'
+  | 'feedback_available'
+  | 'discussion_active'
+  | 'ready_for_next';
 
 export interface SlideItem {
   slideNumber: number;

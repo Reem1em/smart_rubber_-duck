@@ -15,6 +15,7 @@ import {
   ExamMilestonePlan,
   MaterialInput,
   SavedCourse,
+  SlideSource,
   WorkspaceExport,
 } from '../types';
 
@@ -138,6 +139,8 @@ export async function upsertCourseFromMaterial(
     inProgressConceptIds: existing?.inProgressConceptIds ?? [],
     // A syllabus roadmap is keyed to the same document, so re-analyzing keeps it.
     roadmap: existing?.roadmap,
+    // Slide text of the same document stays valid until re-extraction replaces it.
+    slideSources: existing?.slideSources?.filter((s) => s.sourceId === id),
     ownerId: ownerId ?? existing?.ownerId,
   });
 }
@@ -316,10 +319,29 @@ export async function removeFileFromCourse(
   return putCourse({
     ...course,
     files: (course.files ?? []).filter((f) => f.id !== fileId),
+    slideSources: (course.slideSources ?? []).filter((s) => s.sourceId !== fileId),
     concepts: prunedConcepts,
     masteredConceptIds: course.masteredConceptIds.filter((id) => prunedIds.has(id)),
     gapConceptIds: (course.gapConceptIds ?? []).filter((id) => prunedIds.has(id)),
     inProgressConceptIds: (course.inProgressConceptIds ?? []).filter((id) => prunedIds.has(id)),
+  });
+}
+
+/**
+ * Stores (or replaces) the extracted slide text of one source file. Ignored when the
+ * source no longer belongs to the course (e.g. the chapter was removed mid-extraction).
+ */
+export async function setSlideSource(
+  courseId: string,
+  source: SlideSource
+): Promise<SavedCourse | undefined> {
+  const course = await getCourse(courseId);
+  if (!course) return undefined;
+  const belongs = source.sourceId === course.id || (course.files ?? []).some((f) => f.id === source.sourceId);
+  if (!belongs) return undefined;
+  return putCourse({
+    ...course,
+    slideSources: [...(course.slideSources ?? []).filter((s) => s.sourceId !== source.sourceId), source],
   });
 }
 

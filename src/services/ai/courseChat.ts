@@ -1,5 +1,6 @@
 import { CourseChatMessage } from '../../types';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import type { ChatExcerpt, ConceptSummary, Grounding } from '../slides/retrieval';
 
 export interface CourseChatRequest {
   courseId: string;
@@ -7,7 +8,14 @@ export interface CourseChatRequest {
   conceptNames: string[];
   message: string;
   focusConcept?: { name: string; summary?: string; keyPrinciples?: string[] };
+  /** Earlier turns only — never includes `message`. */
   history: Pick<CourseChatMessage, 'role' | 'text'>[];
+  /** Retrieved slide evidence; empty unless grounding is 'slides' or 'partial'. */
+  excerpts: ChatExcerpt[];
+  grounding: Grounding;
+  unavailableSources: string[];
+  /** AI concept summaries, sent only when no slide text exists ('summaries_only'). */
+  summaries: ConceptSummary[];
 }
 
 export interface CourseChatReply {

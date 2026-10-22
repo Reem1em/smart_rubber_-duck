@@ -12,3 +12,5 @@ export { reviewProject } from './reviewProject';
 export { generateCodeLab } from './codeLab';
 export { generateDevChallenge, evaluateDevSubmission, evaluateCustomLab } from './devLab';
 export { generateBugChallenge, evaluateBugChallenge } from './bugLab';
+export { evaluateQuizAnswer, discussQuizAnswer } from './quizEval';
+export { extractSlides, failedSlideSource } from './extractSlides';

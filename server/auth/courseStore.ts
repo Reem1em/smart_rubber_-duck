@@ -31,6 +31,8 @@ export interface ServerCourse {
   roadmap?: unknown;
   activeMilestonePlan?: unknown;
   files?: unknown[];
+  /** Extracted slide text per source file (see SlideSource in src/types.ts). */
+  slideSources?: unknown[];
   /** Always equals the owning user's `sub`; stored for export/import symmetry. */
   ownerId: string;
 }

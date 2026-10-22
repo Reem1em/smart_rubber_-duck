@@ -17,6 +17,8 @@ import {
   WorkspaceExport,
 } from '../types';
 import * as courseStore from '../services/courseStore';
+import { extractSlides, failedSlideSource } from '../services/ai';
+import { isRateLimitError } from '../utils/rateLimit';
 import { useAuth } from './AuthContext';
 import {
   fetchServerCourses,
@@ -95,6 +97,18 @@ interface AppState {
   ) => Promise<{ duplicate: boolean }>;
   /** Prunes a chapter file and all its concepts from the active course. */
   removeChapterFromCourse: (courseId: string, fileId: string) => Promise<void>;
+  /** Source ids whose slide text is being extracted right now. */
+  extractingSlideSourceIds: string[];
+  /**
+   * Extracts and stores the full slide text of one file (primary material or chapter) for the
+   * course chat. Runs in the background; failures are stored as a `failed` source, never hidden.
+   */
+  extractCourseSlides: (
+    courseId: string,
+    sourceId: string,
+    material: Pick<MaterialInput, 'fileName' | 'rawText' | 'base64Data' | 'mimeType'>,
+    concepts: Concept[]
+  ) => Promise<void>;
 
   /* ---- Course Roadmap (خريطة المقرر) ---- */
   /** The active course, resolved from the local workspace. */
@@ -227,6 +241,47 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     })();
   }, [authStatus, ownerId, refreshCourses]);
 
+  const [extractingSlideSourceIds, setExtractingSlideSourceIds] = useState<string[]>([]);
+  const extractingRef = React.useRef(new Set<string>());
+
+  const extractCourseSlides = async (
+    courseId: string,
+    sourceId: string,
+    mat: Pick<MaterialInput, 'fileName' | 'rawText' | 'base64Data' | 'mimeType'>,
+    sourceConcepts: Concept[]
+  ): Promise<void> => {
+    const key = `${courseId}::${sourceId}`;
+    if (extractingRef.current.has(key)) return;
+    if (!mat.base64Data && !mat.rawText) return;
+    extractingRef.current.add(key);
+    setExtractingSlideSourceIds((ids) => [...ids, sourceId]);
+
+    let source;
+    try {
+      source = await extractSlides(mat, sourceId, sourceConcepts);
+    } catch (err: any) {
+      if (isRateLimitError(err)) showRateLimitModal();
+      source = failedSlideSource(
+        sourceId,
+        mat.fileName,
+        isRateLimitError(err)
+          ? 'تم استهلاك حصة الاستخدام؛ أعد معالجة الشرائح لاحقاً.'
+          : 'تعذّر استخراج نص الشرائح الآن. يمكنك إعادة المعالجة لاحقاً.'
+      );
+    }
+
+    try {
+      const updated = await courseStore.setSlideSource(courseId, source);
+      await refreshCourses();
+      if (ownerId && updated) void pushCourseToServer(updated);
+    } catch (err) {
+      console.warn('تعذر حفظ نص الشرائح محلياً:', err);
+    } finally {
+      extractingRef.current.delete(key);
+      setExtractingSlideSourceIds((ids) => ids.filter((id) => id !== sourceId));
+    }
+  };
+
   const saveCourse = async (id: string, mat: MaterialInput, extracted: Concept[]) => {
     try {
       const saved = await courseStore.upsertCourseFromMaterial(id, mat, extracted, ownerId);
@@ -234,6 +289,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await refreshCourses();
       // Mirror to server for cross-device sync (fire-and-forget).
       if (ownerId) void pushCourseToServer(saved);
+      // Slide text for the course chat, in the background — the course opens immediately.
+      void extractCourseSlides(id, id, mat, extracted);
     } catch (err) {
       console.warn('تعذر حفظ المادة محلياً:', err);
     }
@@ -522,6 +579,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         importWorkspace,
         addChapterToCourse,
         removeChapterFromCourse,
+        extractingSlideSourceIds,
+        extractCourseSlides,
         activeCourse,
         saveActiveRoadmap,
         resetActiveRoadmap,
