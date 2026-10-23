@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, type GenerateContentConfig } from '@google/genai';
 
 import { recordModelUsage } from './auth/quota';
 
@@ -123,10 +123,19 @@ function isTransientError(err: any): boolean {
   return /timed out|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|fetch failed|socket hang up|INTERNAL/i.test(msg);
 }
 
+/**
+ * Parameters for one generation. `config` is the SDK's own config type, so `temperature`
+ * (and every other sampling knob) is type-checked and forwarded to the model unchanged.
+ */
+export interface ModelParams {
+  contents: any;
+  config?: GenerateContentConfig;
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** One model call raced against a timeout; token usage is metered on success. */
-async function callModel(model: string, params: { contents: any; config?: any }, timeoutMs: number): Promise<any> {
+async function callModel(model: string, params: ModelParams, timeoutMs: number): Promise<any> {
   let timeoutId: NodeJS.Timeout | undefined;
   try {
     const timeoutPromise = new Promise((_, reject) => {
@@ -162,7 +171,7 @@ async function callModel(model: string, params: { contents: any; config?: any },
 async function generateAcrossChain(
   tag: string,
   chain: string[],
-  params: { contents: any; config?: any },
+  params: ModelParams,
   timeoutMs: number,
   budgetMs: number
 ): Promise<any> {
@@ -201,7 +210,7 @@ async function generateAcrossChain(
 }
 
 /** Heavy curriculum generation (material analysis, syllabus → roadmap). */
-export async function generateWithRetry(params: { contents: any; config?: any }, customTimeoutMs?: number): Promise<any> {
+export async function generateWithRetry(params: ModelParams, customTimeoutMs?: number): Promise<any> {
   return generateAcrossChain(
     'heavy',
     chainFromEnv('GEMINI_HEAVY_MODELS', DEFAULT_HEAVY_CHAIN),
@@ -212,7 +221,7 @@ export async function generateWithRetry(params: { contents: any; config?: any },
 }
 
 /** Real-time generation for challenges, chat and answer evaluation. */
-export async function generateInteractive(params: { contents: any; config?: any }, customTimeoutMs?: number) {
+export async function generateInteractive(params: ModelParams, customTimeoutMs?: number) {
   return generateAcrossChain(
     'interactive',
     chainFromEnv('GEMINI_FAST_MODELS', DEFAULT_INTERACTIVE_CHAIN),

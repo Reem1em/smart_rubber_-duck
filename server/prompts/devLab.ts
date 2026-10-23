@@ -4,6 +4,9 @@
  * - bugHunter:  a realistic snippet carrying exactly one subtle defect.
  */
 
+import type { CodeExecutionReport, CustomLabTestResult } from '../../src/types';
+import { DETERMINISTIC_EVALUATION_MANDATE, buildExecutionBlock } from '../execution';
+
 export type DevLabMode = 'builder' | 'bugHunter';
 
 /** One student-defined test case for the Custom Lab Assignment judge. */
@@ -20,14 +23,20 @@ const NO_CHITCHAT = `قواعد التنفيذ الفوري (PROACTIVE SCENARIO 
 2. يُمنع كشف الحل أو مكان الخطأ داخل نص التحدي.
 3. النصوص الوصفية بالعربية الفصحى الواضحة، وأسماء المتغيرات والكود بالإنجليزية.`;
 
+/** Persona followed by the course scope, when the lab was opened inside a course. */
+const withScope = (scopeBlock: string): string => (scopeBlock ? `${PERSONA}\n\n${scopeBlock}` : PERSONA);
+
 /** Builds the challenge-generation prompt for either mode. */
-export function buildDevChallengePrompt({ mode, language, level }: {
+export function buildDevChallengePrompt({ mode, language, level, scopeBlock = '' }: {
   mode: DevLabMode;
   language: string;
   level: string;
+  /** Course isolation rules from buildLabScopeBlock ('' outside a course). */
+  scopeBlock?: string;
 }): string {
+  const persona = withScope(scopeBlock);
   if (mode === 'bugHunter') {
-    return `${PERSONA}
+    return `${persona}
 النمط: صياد الثغرات البرمجية (Bug-Hunter Lab).
 لغة البرمجة: "${language}" • مستوى الطالب: "${level}".
 
@@ -51,7 +60,7 @@ ${NO_CHITCHAT}
 اجعل voicePrompt = "وين الثغرة في هذا الكود؟ اشرح لي بصوتك وش يصير فيها وكيف تصلحها."`;
   }
 
-  return `${PERSONA}
+  return `${persona}
 النمط: تحدي البناء والتنفيذ (Feature Builder).
 لغة البرمجة: "${language}" • مستوى الطالب: "${level}".
 
@@ -71,14 +80,19 @@ ${NO_CHITCHAT}
 }
 
 /** Builds the submission-evaluation prompt for either mode. */
-export function buildDevEvaluationPrompt({ mode, language, level, challenge, studentCode, studentExplanation }: {
+export function buildDevEvaluationPrompt({ mode, language, level, challenge, studentCode, studentExplanation, scopeBlock = '', execution = null }: {
   mode: DevLabMode;
   language: string;
   level: string;
   challenge: string;
   studentCode: string;
   studentExplanation?: string;
+  /** Course isolation rules from buildLabScopeBlock ('' outside a course). */
+  scopeBlock?: string;
+  /** Real Pyodide results; null when the language cannot run in the browser. */
+  execution?: CodeExecutionReport | null;
 }): string {
+  const persona = withScope(scopeBlock);
   const modeCriteria = mode === 'bugHunter'
     ? `معايير نمط صياد الثغرات:
 1. هل حدد الطالب الثغرة الصحيحة بدقة (وليس خطأً تجميلياً آخر)؟
@@ -89,7 +103,7 @@ export function buildDevEvaluationPrompt({ mode, language, level, challenge, stu
 2. هل يتعامل مع الحالات الحدية المذكورة (مدخلات فارغة، قيم حدية، أنواع غير متوقعة)؟
 3. هل البنية والتسمية والتعقيد مناسبة لمستوى "${level}"؟`;
 
-  return `${PERSONA}
+  return `${persona}
 أنت الآن تراجع تسليم الطالب في معمل البرمجة.
 لغة البرمجة: "${language}" • المستوى: "${level}".
 
@@ -104,6 +118,7 @@ ${(studentCode || 'لم يسلم الطالب أي كود').slice(0, 6000)}
 """
 
 ${studentExplanation ? `شرح الطالب الصوتي/المكتوب:\n"${studentExplanation.slice(0, 2000)}"\n` : ''}
+${execution ? `${buildExecutionBlock(execution)}\n` : ''}
 ${modeCriteria}
 
 قواعد التقييم والرد:
@@ -115,27 +130,47 @@ ${modeCriteria}
 6. codeQuality: ملاحظات التسمية والبنية والتعقيد وأفضل الممارسات.
 7. improvedCode: النسخة المصححة النظيفة بلغة ${language} نفسها مع تعليقات عربية موجزة على مواضع التغيير.
 8. mastery: "needs-work" إذا كانت score أقل من 60، "competent" إذا 60-84، "mastered" إذا 85 فأعلى.
-9. إن كان التسليم فارغاً أو غير متعلق بالتحدي، أعطِ score منخفضة ووجّه الطالب بلطف بدل اختلاق إيجابيات.`;
+9. إن كان التسليم فارغاً أو غير متعلق بالتحدي، أعطِ score منخفضة ووجّه الطالب بلطف بدل اختلاق إيجابيات.${
+    execution ? `\n${executionRules(execution)}` : ''
+  }`;
+}
+
+/** Overrides for an executed submission: facts first, and no ready-made fix when it failed. */
+function executionRules(execution: CodeExecutionReport): string {
+  const shared = `قواعد التنفيذ الفعلي (تتقدم على كل ما سبق):
+- لا تدّعِ خطأً نحوياً أو تشغيلياً لم يظهر في نتائج التنفيذ، ولا تنكر خطأً ظهر فيها.`;
+  if (execution.executionSuccess) {
+    return `${shared}
+- الكود يعمل وكل الأمثلة المنفذة نجحت: قيّم تغطية المتطلبات والحالات الحدية وجودة الكود فقط.`;
+  }
+  return `${shared}
+- executionSuccess = false: دورك الوحيد بطة مطاط سقراطية. score أقل من 60 و mastery = "needs-work".
+- flaws: صف الخطأ الفعلي أو عدم تطابق المخرج كما ظهر بالضبط (السطر ونوع الخطأ)، بدون كتابة الإصلاح.
+- verdict: اختمه بسؤال سقراطي واحد يقود الطالب لاكتشاف السبب بنفسه.
+- improvedCode: اتركه فارغاً "" — يُمنع إعطاء الحل المباشر.`;
 }
 
 /**
  * Builds the strict-judge prompt for a Custom Lab Assignment (مسألة من الملزمة / كود مخصص).
  * I/O values are JSON-encoded so trailing spaces and newlines stay visible to the judge.
  */
-export function buildCustomLabEvaluationPrompt({ taskPrompt, language, testCases, constraints, studentCode }: {
+export function buildCustomLabEvaluationPrompt({ taskPrompt, language, testCases, constraints, studentCode, scopeBlock = '' }: {
   taskPrompt: string;
   language: string;
   testCases: CustomLabTestCase[];
   constraints: string;
   studentCode: string;
+  /** Course isolation rules from buildLabScopeBlock ('' outside a course). */
+  scopeBlock?: string;
 }): string {
+  const persona = withScope(scopeBlock);
   const testCasesFormatted = testCases
     .map((tc, i) => `حالة اختبار ${i + 1} (testIndex=${i}):
   المدخلات: ${tc.input ? JSON.stringify(tc.input) : '(بدون مدخلات)'}
   المخرج المتوقع: ${JSON.stringify(tc.expectedOutput)}`)
     .join('\n\n');
 
-  return `${PERSONA}
+  return `${persona}
 أنت الآن "الحكم الآلي الصارم" (Strict Automated Judge) لمسألة من الملزمة أو مسألة مخصصة أدخلها الطالب.
 لغة البرمجة: "${language}".
 
@@ -173,4 +208,56 @@ ${studentCode}
   "hint": "...",
   "edgeCaseChallenge": ""
 }`;
+}
+
+/**
+ * Feedback-only prompt for a Custom Lab run that was actually executed. Pass/fail is already
+ * decided (see judgeTestRuns); the model explains it and never re-judges the table.
+ */
+export function buildCustomLabFeedbackPrompt({ taskPrompt, language, testResults, constraints, studentCode, scopeBlock = '' }: {
+  taskPrompt: string;
+  language: string;
+  testResults: CustomLabTestResult[];
+  constraints: string;
+  studentCode: string;
+  /** Course isolation rules from buildLabScopeBlock ('' outside a course). */
+  scopeBlock?: string;
+}): string {
+  const persona = withScope(scopeBlock);
+  const allPassed = testResults.every((r) => r.passed);
+  const table = testResults
+    .map(
+      (r) =>
+        `حالة ${r.testIndex + 1}: المدخلات ${JSON.stringify(r.input)} • المتوقع ${JSON.stringify(r.expectedOutput)} • الفعلي ${JSON.stringify(r.actualOutput)} • ${r.passed ? 'نجحت ✅' : 'فشلت ❌'}`
+    )
+    .join('\n');
+
+  return `${persona}
+أنت الآن تشرح نتائج تنفيذ حقيقي لمسألة من الملزمة أو مسألة مخصصة أدخلها الطالب.
+لغة البرمجة: "${language}".
+
+${DETERMINISTIC_EVALUATION_MANDATE}
+executionSuccess: ${allPassed}
+
+نص السؤال والمطلوب برمجياً:
+"""
+${taskPrompt}
+"""
+
+نتائج التنفيذ الفعلي (القيم بصيغة JSON، والحكم نهائي — لا تعِد تقييم أي حالة):
+${table}
+
+${constraints ? `قيود وشروط خاصة:\n"""\n${constraints}\n"""\n` : ''}
+كود الطالب المسلَّم:
+"""
+${studentCode}
+"""
+
+المطلوب (تحت 50 كلمة لكل حقل نصي):
+- rootCauseAnalysis: ${allPassed ? 'اتركه فارغاً.' : 'حدد السطر أو التعبير الذي أدى إلى الخطأ الفعلي أو عدم التطابق وسببه، بدون إعادة كتابة الحل.'}
+- hint: ${allPassed ? 'تهنئة قصيرة بلهجة سعودية عصرية.' : 'سؤال أو تلميح سقراطي بلهجة سعودية عصرية يقود الطالب للإصلاح بنفسه (مثال: "قارن الاوتبت حرفاً حرفاً، وش الزايد عندك؟")، بدون الحل المباشر.'}
+- constraintNotes: لكل قيد خاص هل تحقق في الكود أم لا ولماذا، وإلا اتركها فارغة.
+- edgeCaseChallenge: ${allPassed ? 'حالة حدية واحدة محددة يجربها الطالب بنفسه.' : 'اتركه فارغاً.'}
+
+أعد JSON فقط: { "rootCauseAnalysis": "", "hint": "", "constraintNotes": [], "edgeCaseChallenge": "" }`;
 }

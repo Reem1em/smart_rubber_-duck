@@ -6,12 +6,24 @@ import { parseModelJson } from '../modelJson';
 import { buildProjectReviewPrompt } from '../prompts/reviewProject';
 import { projectReviewSchema } from '../schemas/reviewProject';
 import { projectReviewFallback } from '../fallbacks/reviewProject';
+import { buildLabScopeBlock, resolveCourseScope } from '../courseScope';
 
 export const handleReviewProject = async (req: Request, res: Response) => {
   try {
-    const { subjectName, codeSnippet, projectRequest, studentLevel } = req.body;
+    const { codeSnippet, projectRequest, studentLevel } = req.body;
+    const scoped = await resolveCourseScope(req);
+    if ('error' in scoped) return res.status(400).json({ error: scoped.error });
 
-    const prompt = buildProjectReviewPrompt({ subjectName, codeSnippet, projectRequest, studentLevel });
+    // The active course's verified title wins over a free-text subject name.
+    const subjectName = scoped.scope?.courseTitle || req.body?.subjectName;
+
+    const prompt = buildProjectReviewPrompt({
+      subjectName,
+      codeSnippet,
+      projectRequest,
+      studentLevel,
+      scopeBlock: buildLabScopeBlock(scoped.scope),
+    });
 
     const response = await generateInteractive({
       contents: prompt,

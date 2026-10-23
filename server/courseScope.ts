@@ -53,9 +53,12 @@ export function parseCourseScope(raw: unknown): CourseScopeResult {
   };
 }
 
-/** Parses `req.body.courseScope`, then prefers the signed-in user's server copy of the course. */
-export async function resolveCourseScope(req: Request): Promise<CourseScopeResult> {
-  const parsed = parseCourseScope(req.body?.courseScope);
+/**
+ * Parses the client's scope (default `req.body.courseScope`), then prefers the signed-in user's
+ * server copy of the course. Routes with a different wire shape (the chat) pass `raw` themselves.
+ */
+export async function resolveCourseScope(req: Request, raw: unknown = req.body?.courseScope): Promise<CourseScopeResult> {
+  const parsed = parseCourseScope(raw);
   if ('error' in parsed || !parsed.scope) return parsed;
 
   const sub = verifySession(bearerToken(req.headers.authorization));
@@ -81,18 +84,42 @@ export async function resolveCourseScope(req: Request): Promise<CourseScopeResul
 export const scopeSubjectText = (scope: CourseScope | null): string[] =>
   scope ? [scope.courseTitle] : [];
 
+/** Verbatim mandate injected into every course-bound prompt (concept sessions, chat, labs). */
+export const ZERO_HALLUCINATION_MANDATE =
+  'ZERO-HALLUCINATION MANDATE: Restrict outputs 100% strictly to the active course scope and extracted concepts. Drawing examples or questions from other subjects or past session context is strictly prohibited.';
+
+const conceptList = (scope: CourseScope): string =>
+  scope.conceptNames.length ? scope.conceptNames.join('، ') : '(غير محددة)';
+
 /** Prompt block that pins the model to one course. Always returns a rule, even without a scope. */
 export function buildCourseScopeBlock(scope: CourseScope | null, conceptName: string): string {
-  const rules = `قواعد عزل المقرر (إلزامية):
+  const rules = `${ZERO_HALLUCINATION_MANDATE}
+قواعد عزل المقرر (إلزامية):
 - التزم حصراً بمادة هذا المقرر والمفهوم "${oneLine(conceptName, MAX_CONCEPT_NAME)}". لا تستورد أمثلة أو مصطلحات أو رموزاً من مقررات أو تخصصات أخرى (لا مصفوفات أو تكاملات في مقرر برمجة، ولا شيفرة برمجية في مقرر رياضيات) ما لم تكن جزءاً من هذا المقرر نفسه.
+- لا تعتمد على أي جلسة أو محادثة سابقة أو مقرر آخر؛ السياق المرفق في هذا الطلب هو المرجع الوحيد.
 - لا تخترع مفاهيم أو حقائق ليست من هذا المقرر؛ إن لم تكن متأكداً فقل ذلك صراحة.
 - إن خرج كلام الطالب عن المقرر فأعده بلطف إلى المفهوم الحالي.`;
 
   if (!scope) return rules;
 
-  const concepts = scope.conceptNames.length ? scope.conceptNames.join('، ') : '(غير محددة)';
   return `--- نطاق المقرر (course_id: ${scope.courseId}) ---
 المقرر: "${scope.courseTitle}"
-مفاهيم هذا المقرر: ${concepts}
+مفاهيم هذا المقرر: ${conceptList(scope)}
 ${rules}`;
+}
+
+/**
+ * Scope block for the practical labs (code/bug/project). Labs are also reachable outside any
+ * course, so without a scope this returns '' and the lab stays a general programming tool.
+ */
+export function buildLabScopeBlock(scope: CourseScope | null): string {
+  if (!scope) return '';
+  return `--- نطاق المقرر (course_id: ${scope.courseId}) ---
+المقرر: "${scope.courseTitle}"
+مفاهيم هذا المقرر: ${conceptList(scope)}
+${ZERO_HALLUCINATION_MANDATE}
+قواعد عزل المقرر (إلزامية):
+- ابنِ التحدي أو التقييم حصراً حول مفاهيم هذا المقرر المذكورة أعلاه؛ لغة البرمجة أداة تنفيذ فقط وليست مصدراً لمواضيع جديدة.
+- يُمنع إدخال موضوعات من تخصصات أو مقررات أخرى (لا مصفوفات أو تكاملات في مقرر برمجة، ولا مواضيع برمجية خارج مفاهيم مقرر غير برمجي).
+- لا تعتمد على أي تحدٍّ أو جلسة سابقة؛ هذا الطلب مستقل تماماً.`;
 }

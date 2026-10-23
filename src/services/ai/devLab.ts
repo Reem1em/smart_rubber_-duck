@@ -1,4 +1,13 @@
-import { CustomLabEvaluation, CustomLabTestCase, DevChallenge, DevEvaluation, DevLabMode } from '../../types';
+import {
+  CodeExecutionReport,
+  CourseScope,
+  CustomLabEvaluation,
+  CustomLabTestCase,
+  CustomLabTestRun,
+  DevChallenge,
+  DevEvaluation,
+  DevLabMode,
+} from '../../types';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 async function postJson<T>(url: string, data: unknown, fallbackError: string): Promise<T> {
@@ -21,6 +30,7 @@ export function generateDevChallenge(data: {
   mode: DevLabMode;
   language: string;
   level: string;
+  courseScope?: CourseScope;
 }): Promise<DevChallenge> {
   return postJson<DevChallenge>('/api/code-lab/challenge', data, 'فشل في إنشاء التحدي البرمجي.');
 }
@@ -33,6 +43,9 @@ export function evaluateDevSubmission(data: {
   challenge: string;
   studentCode: string;
   studentExplanation?: string;
+  courseScope?: CourseScope;
+  /** Real Pyodide results (Python only); the grader treats them as truth. */
+  execution?: CodeExecutionReport;
 }): Promise<DevEvaluation> {
   return postJson<DevEvaluation>('/api/code-lab/evaluate', data, 'فشل في تقييم الحل البرمجي.');
 }
@@ -44,6 +57,9 @@ export function evaluateCustomLab(data: {
   testCases: CustomLabTestCase[];
   constraints: string;
   studentCode: string;
+  courseScope?: CourseScope;
+  /** One real run per test case (Python only); pass/fail is then decided by execution. */
+  testRuns?: CustomLabTestRun[];
 }): Promise<CustomLabEvaluation> {
   return postJson<CustomLabEvaluation>('/api/code-lab/custom-evaluate', data, 'فشل في تقييم حل المسألة المخصصة.');
 }

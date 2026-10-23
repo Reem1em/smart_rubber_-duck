@@ -1,4 +1,5 @@
 import { MATH_ENGINE_DIRECTIVES } from '../stem';
+import { buildTranscriptionToleranceRule } from './transcription';
 
 /** Diagnosis prompt: scores the explanation and asks a single Socratic question. */
 export function buildDiagnosePrompt({ concept, studentExplanation, confidenceLevel, materialContext, isStem, courseScopeBlock }: {
@@ -50,6 +51,8 @@ ${mathEngineBlock}
 مستوى ثقة الطالب المعلن: ${confidenceLevel}%
 شرح الطالب للمفهوم:
 "${studentExplanation}"
+
+${buildTranscriptionToleranceRule({ scoreField: 'understandingScore', flawsField: 'identifiedFlaws' })}
 
 مهمتك بصفتك كواكلي (Quakly):
 1. تقييم مستوى الفهم الفعلي للطالب (understandingScore) من 0 إلى 100 بناءً على الدقة العلمية والمنطقية في مادة هذا المقرر.

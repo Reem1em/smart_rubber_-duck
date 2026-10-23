@@ -1,11 +1,10 @@
 import type { Request, Response } from 'express';
 
 import { generateInteractive } from '../gemini';
-import { handleModelFailure } from '../routeErrors';
+import { handleAssessmentFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildDiagnosePrompt } from '../prompts/diagnose';
 import { diagnoseSchema } from '../schemas/diagnose';
-import { diagnoseFallback } from '../fallbacks/diagnose';
 import { isStemTopic } from '../stem';
 import { buildCourseScopeBlock, resolveCourseScope, scopeSubjectText } from '../courseScope';
 
@@ -42,12 +41,14 @@ export const handleDiagnose = async (req: Request, res: Response) => {
       config: {
         responseMimeType: 'application/json',
         responseSchema: diagnoseSchema,
+        // Low variance for grading the spoken explanation, with slight room for natural phrasing.
+        temperature: 0.1,
       },
     });
 
     const parsed = parseModelJson(response.text);
     return res.json(parsed);
   } catch (err: any) {
-    return handleModelFailure(res, 'diagnose', err, () => diagnoseFallback(req.body));
+    return handleAssessmentFailure(res, 'diagnose', err);
   }
 };

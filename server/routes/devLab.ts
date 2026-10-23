@@ -1,13 +1,28 @@
 import type { Request, Response } from 'express';
 
 import { generateInteractive } from '../gemini';
-import { handleModelFailure } from '../routeErrors';
+import { handleAssessmentFailure, handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
-import { buildDevChallengePrompt, buildDevEvaluationPrompt, buildCustomLabEvaluationPrompt, CustomLabTestCase, DevLabMode } from '../prompts/devLab';
-import { devChallengeSchema, devEvaluationSchema, customLabEvaluationSchema } from '../schemas/devLab';
-import { devChallengeFallback, devEvaluationFallback, customLabEvaluationFallback } from '../fallbacks/devLab';
+import {
+  buildCustomLabEvaluationPrompt,
+  buildCustomLabFeedbackPrompt,
+  buildDevChallengePrompt,
+  buildDevEvaluationPrompt,
+  CustomLabTestCase,
+  DevLabMode,
+} from '../prompts/devLab';
+import { customLabEvaluationSchema, customLabFeedbackSchema, devChallengeSchema, devEvaluationSchema } from '../schemas/devLab';
+import { devChallengeFallback } from '../fallbacks/devLab';
+import { buildLabScopeBlock, resolveCourseScope } from '../courseScope';
+import { judgeTestRuns, parseExecutionReport, parseTestRuns } from '../execution';
+import { isPythonLanguage } from '../../src/services/execution/compare';
 
 const normalizeMode = (raw: unknown): DevLabMode => (raw === 'bugHunter' ? 'bugHunter' : 'builder');
+
+/** Highest score for code that crashed or failed an executed sample (always "needs-work"). */
+const FAILED_EXECUTION_SCORE_CAP = 59;
+
+const masteryFor = (score: number) => (score < 60 ? 'needs-work' : score < 85 ? 'competent' : 'mastered');
 
 const MAX_TEST_CASES = 3;
 
@@ -30,7 +45,10 @@ export const handleGenerateDevChallenge = async (req: Request, res: Response) =>
     const language = req.body?.language || 'Python';
     const level = req.body?.level || 'Intermediate';
 
-    const prompt = buildDevChallengePrompt({ mode, language, level });
+    const scoped = await resolveCourseScope(req);
+    if ('error' in scoped) return res.status(400).json({ error: scoped.error });
+
+    const prompt = buildDevChallengePrompt({ mode, language, level, scopeBlock: buildLabScopeBlock(scoped.scope) });
 
     const response = await generateInteractive({
       contents: prompt,
@@ -52,19 +70,30 @@ export const handleGenerateDevChallenge = async (req: Request, res: Response) =>
   }
 };
 
-/** Grades a Code Lab submission against correctness, edge cases and code quality. */
+/**
+ * Grades a Code Lab submission against correctness, edge cases and code quality.
+ * Python submissions arrive with real Pyodide results (`execution`); those facts bind the
+ * grade deterministically, and the model only explains them.
+ */
 export const handleEvaluateDevSubmission = async (req: Request, res: Response) => {
   try {
     const mode = normalizeMode(req.body?.mode);
-    const { language, level, challenge, studentCode, studentExplanation } = req.body || {};
+    const { level, challenge, studentCode, studentExplanation } = req.body || {};
+    const language = clip(req.body?.language, 40) || 'Python';
+    const execution = isPythonLanguage(language) ? parseExecutionReport(req.body?.execution) : null;
+
+    const scoped = await resolveCourseScope(req);
+    if ('error' in scoped) return res.status(400).json({ error: scoped.error });
 
     const prompt = buildDevEvaluationPrompt({
       mode,
-      language: language || 'Python',
+      language,
       level: level || 'Intermediate',
       challenge: challenge || '',
       studentCode: studentCode || '',
       studentExplanation,
+      scopeBlock: buildLabScopeBlock(scoped.scope),
+      execution,
     });
 
     const response = await generateInteractive({
@@ -72,6 +101,8 @@ export const handleEvaluateDevSubmission = async (req: Request, res: Response) =
       config: {
         responseMimeType: 'application/json',
         responseSchema: devEvaluationSchema,
+        // Code grading must follow strict logic with no creative deviation.
+        temperature: 0.0,
       },
     });
 
@@ -80,9 +111,20 @@ export const handleEvaluateDevSubmission = async (req: Request, res: Response) =
       throw new Error('Invalid dev evaluation response');
     }
 
-    return res.json(parsed);
+    // Code that crashed or failed a sample cannot pass, whatever the model wrote, and the
+    // Socratic contract forbids handing over the fix.
+    const failedExecution = execution !== null && !execution.executionSuccess;
+    const score = Math.max(0, Math.min(100, failedExecution ? Math.min(parsed.score, FAILED_EXECUTION_SCORE_CAP) : parsed.score));
+
+    return res.json({
+      ...parsed,
+      score,
+      mastery: masteryFor(score),
+      improvedCode: failedExecution ? '' : String(parsed.improvedCode || ''),
+      verifiedByExecution: execution !== null,
+    });
   } catch (err: any) {
-    return handleModelFailure(res, 'dev-lab', err, () => devEvaluationFallback());
+    return handleAssessmentFailure(res, 'dev-lab', err);
   }
 };
 
@@ -105,14 +147,38 @@ export const handleEvaluateCustomLab = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'يجب تعريف حالة اختبار واحدة على الأقل مع المخرج المتوقع.' });
   }
 
+  const scoped = await resolveCourseScope(req);
+  if ('error' in scoped) return res.status(400).json({ error: scoped.error });
+
+  const testRuns = isPythonLanguage(language) ? parseTestRuns(req.body?.testRuns, testCases.length) : null;
+  if (testRuns) {
+    return evaluateExecutedCustomLab(res, {
+      taskPrompt,
+      language,
+      constraints,
+      studentCode,
+      testResults: judgeTestRuns(testCases, testRuns),
+      scopeBlock: buildLabScopeBlock(scoped.scope),
+    });
+  }
+
   try {
-    const prompt = buildCustomLabEvaluationPrompt({ taskPrompt, language, testCases, constraints, studentCode });
+    const prompt = buildCustomLabEvaluationPrompt({
+      taskPrompt,
+      language,
+      testCases,
+      constraints,
+      studentCode,
+      scopeBlock: buildLabScopeBlock(scoped.scope),
+    });
 
     const response = await generateInteractive({
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
         responseSchema: customLabEvaluationSchema,
+        // Code grading must follow strict logic with no creative deviation.
+        temperature: 0.0,
       },
     });
 
@@ -140,8 +206,44 @@ export const handleEvaluateCustomLab = async (req: Request, res: Response) => {
       constraintNotes: Array.isArray(parsed.constraintNotes) ? parsed.constraintNotes.map(String) : [],
       hint: String(parsed.hint || ''),
       edgeCaseChallenge: allPassed ? String(parsed.edgeCaseChallenge || '') : '',
+      verifiedByExecution: false,
     });
   } catch (err: any) {
-    return handleModelFailure(res, 'custom-lab', err, () => customLabEvaluationFallback(testCases));
+    return handleAssessmentFailure(res, 'custom-lab', err);
   }
 };
+
+/**
+ * Executed Custom Lab: the test table was decided by real execution (judgeTestRuns), so the
+ * model is asked only for Socratic feedback on it and can never flip a result.
+ */
+async function evaluateExecutedCustomLab(
+  res: Response,
+  input: Parameters<typeof buildCustomLabFeedbackPrompt>[0]
+) {
+  const { testResults } = input;
+  const allPassed = testResults.every((r) => r.passed);
+  try {
+    const response = await generateInteractive({
+      contents: buildCustomLabFeedbackPrompt(input),
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: customLabFeedbackSchema,
+        temperature: 0.0,
+      },
+    });
+    const parsed = parseModelJson(response.text);
+
+    return res.json({
+      testResults,
+      allPassed,
+      rootCauseAnalysis: allPassed ? '' : String(parsed?.rootCauseAnalysis || ''),
+      constraintNotes: Array.isArray(parsed?.constraintNotes) ? parsed.constraintNotes.map(String) : [],
+      hint: String(parsed?.hint || ''),
+      edgeCaseChallenge: allPassed ? String(parsed?.edgeCaseChallenge || '') : '',
+      verifiedByExecution: true,
+    });
+  } catch (err: any) {
+    return handleAssessmentFailure(res, 'custom-lab', err);
+  }
+}

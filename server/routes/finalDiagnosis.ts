@@ -1,11 +1,10 @@
 import type { Request, Response } from 'express';
 
 import { generateInteractive } from '../gemini';
-import { handleModelFailure } from '../routeErrors';
+import { handleAssessmentFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildFinalDiagnosisPrompt } from '../prompts/finalDiagnosis';
 import { finalDiagnosisSchema } from '../schemas/finalDiagnosis';
-import { finalDiagnosisFallback } from '../fallbacks/finalDiagnosis';
 import { buildCourseScopeBlock, resolveCourseScope } from '../courseScope';
 
 export const handleFinalDiagnosis = async (req: Request, res: Response) => {
@@ -60,6 +59,6 @@ export const handleFinalDiagnosis = async (req: Request, res: Response) => {
     }
     throw new Error('Invalid final diagnosis response structure');
   } catch (err: any) {
-    return handleModelFailure(res, 'final-diagnosis', err, () => finalDiagnosisFallback(req.body));
+    return handleAssessmentFailure(res, 'final-diagnosis', err);
   }
 };

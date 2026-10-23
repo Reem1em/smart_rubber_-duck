@@ -80,3 +80,15 @@ export const customLabEvaluationSchema = {
   },
   required: ['testResults', 'allPassed', 'rootCauseAnalysis', 'constraintNotes', 'hint', 'edgeCaseChallenge'],
 };
+
+/** Executed Custom Lab: the test table is computed, so the model only writes feedback. */
+export const customLabFeedbackSchema = {
+  type: Type.OBJECT,
+  properties: {
+    rootCauseAnalysis: customLabEvaluationSchema.properties.rootCauseAnalysis,
+    constraintNotes: customLabEvaluationSchema.properties.constraintNotes,
+    hint: customLabEvaluationSchema.properties.hint,
+    edgeCaseChallenge: customLabEvaluationSchema.properties.edgeCaseChallenge,
+  },
+  required: ['rootCauseAnalysis', 'constraintNotes', 'hint', 'edgeCaseChallenge'],
+};

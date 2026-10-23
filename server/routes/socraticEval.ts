@@ -1,11 +1,10 @@
 import type { Request, Response } from 'express';
 
 import { generateInteractive } from '../gemini';
-import { handleModelFailure } from '../routeErrors';
+import { handleAssessmentFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildSocraticEvalPrompt } from '../prompts/socraticEval';
 import { socraticEvalSchema } from '../schemas/socraticEval';
-import { socraticEvalFallback } from '../fallbacks/socraticEval';
 import { isStemTopic } from '../stem';
 import { buildCourseScopeBlock, resolveCourseScope, scopeSubjectText } from '../courseScope';
 
@@ -44,6 +43,6 @@ export const handleSocraticEval = async (req: Request, res: Response) => {
     const parsed = parseModelJson(response.text);
     return res.json(parsed);
   } catch (err: any) {
-    return handleModelFailure(res, 'socratic-eval', err, () => socraticEvalFallback(req.body));
+    return handleAssessmentFailure(res, 'socratic-eval', err);
   }
 };

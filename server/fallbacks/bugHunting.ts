@@ -2,7 +2,7 @@ import { isStemTopic } from '../stem';
 
 /** Static payload served when every model in the chain fails. */
 export function bugChallengeFallback(body: any) {
-  const lang = body?.language || 'جبر المصفوفات والمحددات';
+  const lang = body?.language || body?.courseScope?.courseTitle || 'Python';
 
   if (isStemTopic(lang)) {
     return {
@@ -55,16 +55,5 @@ $$\\det(A) = (1 \\times 3) + (4 \\times 2) = 11$$
 }`,
       totalBugsCount: 4,
     },
-  };
-}
-
-/** Unrated: no score or invented bug findings for a submission the judge never saw. */
-export function bugEvaluationFallback() {
-  return {
-    score: null,
-    summary: 'كواك! السيرفرات زحمة فما قدرت أقيّم صيدك الحين — إجابتك محفوظة، جرّب مرة ثانية بعد شوي.',
-    identifiedBugs: [],
-    missedBugs: [],
-    correctedCode: '',
   };
 }

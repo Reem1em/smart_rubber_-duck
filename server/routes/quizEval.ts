@@ -1,11 +1,10 @@
 import type { Request, Response } from 'express';
 
 import { generateInteractive } from '../gemini';
-import { handleModelFailure } from '../routeErrors';
+import { handleAssessmentFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
 import { buildQuizDiscussionPrompt } from '../prompts/quizEval';
 import { quizDiscussionSchema, validateQuizAnswerBody, sanitizeDiscussion } from '../schemas/quizEval';
-import { quizDiscussionFallback } from '../fallbacks/quizEval';
 import { isStemTopic } from '../stem';
 import { buildCourseScopeBlock, resolveCourseScope, scopeSubjectText } from '../courseScope';
 
@@ -61,16 +60,18 @@ export const handleQuizDiscuss = async (req: Request, res: Response) => {
       config: {
         responseMimeType: 'application/json',
         responseSchema: quizDiscussionSchema,
+        // Fully deterministic: the discussion must never drift from the answer key.
+        temperature: 0.0,
       },
     });
 
     const parsed = parseModelJson(response.text);
     if (typeof parsed?.reply !== 'string' || !parsed.reply.trim()) {
-      return res.json(quizDiscussionFallback(req.body));
+      throw new Error('Empty quiz discussion reply');
     }
 
     return res.json({ reply: parsed.reply });
   } catch (err: any) {
-    return handleModelFailure(res, 'quiz-discuss', err, () => quizDiscussionFallback(req.body));
+    return handleAssessmentFailure(res, 'quiz-discuss', err);
   }
 };

@@ -19,6 +19,7 @@ vi.mock('../auth/courseStore', () => ({
 }));
 
 import { generateInteractive } from '../gemini';
+import { ZERO_HALLUCINATION_MANDATE } from '../courseScope';
 import { handleCourseChat } from './courseChat';
 
 const mockModel = vi.mocked(generateInteractive);
@@ -119,5 +120,24 @@ describe('course chat — no fabricated citations', () => {
     await call({ ...slidesBody('x'), grounding: 'summaries_only' });
     const params = mockModel.mock.calls[0][0] as any;
     expect(params.contents).not.toContain(excerpt.text);
+  });
+});
+
+describe('course isolation', () => {
+  it('injects the zero-hallucination mandate and the course scope', async () => {
+    mockModel.mockResolvedValue({ text: 'تمام.' } as any);
+    await call(slidesBody('وش وظيفة الـ AP؟'));
+    const params = mockModel.mock.calls[0][0] as any;
+    expect(params.config.systemInstruction).toContain(ZERO_HALLUCINATION_MANDATE);
+    expect(params.contents).toContain('"Computer Networks"');
+  });
+
+  it('rejects a malformed course id without calling the model', async () => {
+    const res: any = { statusCode: 200 };
+    res.status = (code: number) => ((res.statusCode = code), res);
+    res.json = (b: any) => ((res.body = b), res);
+    await handleCourseChat({ params: { id: '../other' }, headers: {}, body: slidesBody('سؤال') } as any, res);
+    expect(res.statusCode).toBe(400);
+    expect(mockModel).not.toHaveBeenCalled();
   });
 });

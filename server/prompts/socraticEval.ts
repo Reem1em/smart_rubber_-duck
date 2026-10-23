@@ -1,4 +1,5 @@
 import { MATH_ENGINE_DIRECTIVES } from '../stem';
+import { buildTranscriptionToleranceRule } from './transcription';
 
 /** Grades the Socratic answer, splits it into correct points vs. conceptual gaps, and produces the transfer challenge. */
 export function buildSocraticEvalPrompt({ concept, initialExplanation, socraticQuestion, socraticAnswer, isStem, courseScopeBlock }: {
@@ -32,6 +33,8 @@ ${courseScopeBlock}
 السؤال المطروح: "${socraticQuestion}"
 إجابة وشرح الطالب الصوتي/المكتوب: "${socraticAnswer}"
 سياق الشرح الأولي: "${initialExplanation}"
+
+${buildTranscriptionToleranceRule({ scoreField: 'reasoningQualityScore', flawsField: 'conceptualGaps' })}
 
 قواعد التقييم الصارمة (PEDAGOGICAL CONSTRAINTS):
 1. هل حدد الطالب الخطأ أو الخطوة المطلوبة بدقة؟

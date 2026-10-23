@@ -421,9 +421,48 @@ export interface CustomLabTestResult {
   passed: boolean;
 }
 
+/* ---- Deterministic Python execution (Pyodide, in the student's browser) ---- */
+
+/** One run of student code. `error` is the Python exception line, e.g. "Line 3: ZeroDivisionError: ...". */
+export interface PythonRunResult {
+  success: boolean;
+  output: string;
+  error?: string;
+  /** Killed after the time limit (usually an infinite loop). */
+  timedOut?: boolean;
+}
+
+/** A model-written sample ("expr => expected") actually evaluated against the student's code. */
+export interface SampleCheck {
+  expression: string;
+  expected: string;
+  actual: string;
+  passed: boolean;
+  error?: string;
+}
+
+/** Real execution facts sent with a Builder / Bug-Hunter submission; the grader treats them as truth. */
+export interface CodeExecutionReport {
+  executionSuccess: boolean;
+  actualOutput: string;
+  consoleErrors: string;
+  timedOut?: boolean;
+  sampleChecks: SampleCheck[];
+}
+
+/** Real result of one Custom Lab test case, by index into the submitted test cases. */
+export interface CustomLabTestRun {
+  testIndex: number;
+  actualOutput: string;
+  error?: string;
+  timedOut?: boolean;
+}
+
 export interface CustomLabEvaluation {
   testResults: CustomLabTestResult[];
   allPassed: boolean;
+  /** True when pass/fail came from really running the code, not from the model's estimate. */
+  verifiedByExecution?: boolean;
   /** Set when the judge was unreachable and the server served its static fallback. */
   unverified?: boolean;
   rootCauseAnalysis: string;
@@ -458,6 +497,8 @@ export interface DevEvaluation {
   codeQuality: string[];
   improvedCode: string;
   mastery: DevMastery | null;
+  /** True when the grade is bound to real execution results, false for a model-only estimate. */
+  verifiedByExecution?: boolean;
 }
 
 export interface BugChallenge {

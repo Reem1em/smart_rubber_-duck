@@ -57,8 +57,8 @@ export const CourseChatDrawer: React.FC = () => {
   // The transcript always carries the course it was loaded for (see chatSession.ts).
   const [thread, setThread] = useState<ChatThreadState>({ courseId: null, messages: [] });
   const [input, setInput] = useState('');
-  /** Course whose request is in flight; "sending" never leaks into another course. */
-  const [sendingCourseId, setSendingCourseId] = useState<string | null>(null);
+  /** Courses with a request in flight; "sending" never leaks into another course. */
+  const [sendingCourseIds, setSendingCourseIds] = useState<ReadonlySet<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
 
   const courseId = activeCourse?.id ?? null;
@@ -69,7 +69,16 @@ export const CourseChatDrawer: React.FC = () => {
 
   const threadReady = isThreadFor(thread, courseId);
   const messages = threadReady ? thread.messages : [];
-  const isSending = !!courseId && sendingCourseId === courseId;
+  const isSending = !!courseId && sendingCourseIds.has(courseId);
+
+  const markSending = (id: string, sending: boolean) =>
+    setSendingCourseIds((prev) => {
+      if (prev.has(id) === sending) return prev;
+      const next = new Set(prev);
+      if (sending) next.add(id);
+      else next.delete(id);
+      return next;
+    });
 
   // Swap the transcript whenever the active course changes — drop the old one at once,
   // so nothing from the previous course is shown or sent while the new one loads.
@@ -78,9 +87,16 @@ export const CourseChatDrawer: React.FC = () => {
     setThread({ courseId: null, messages: [] });
     setError(null);
     if (!courseId) return;
-    void chatStore.getThread(courseId).then((loaded) => {
-      if (!cancelled) setThread({ courseId, messages: loaded });
-    });
+    chatStore
+      .getThread(courseId)
+      .then((loaded) => {
+        if (!cancelled) setThread({ courseId, messages: loaded });
+      })
+      .catch((err) => {
+        // Still bind an (empty) thread to this course so the input never stays locked.
+        console.error('Failed to load chat thread:', err);
+        if (!cancelled) setThread({ courseId, messages: [] });
+      });
     return () => {
       cancelled = true;
     };
@@ -100,7 +116,7 @@ export const CourseChatDrawer: React.FC = () => {
     const trimmed = text.trim();
     if (!course || !trimmed || isSending || !isThreadFor(thread, course.id)) return;
 
-    setSendingCourseId(course.id);
+    markSending(course.id, true);
     setError(null);
 
     const studentTurn: CourseChatMessage = {
@@ -119,9 +135,10 @@ export const CourseChatDrawer: React.FC = () => {
     // Optimistic render, then persist, so the bubble never lags the tap.
     appendIfCurrent(course.id, studentTurn);
     setInput('');
-    await chatStore.appendMessage(course.id, studentTurn);
 
     try {
+      // Inside the try: a failed IndexedDB write must still release the send button.
+      await chatStore.appendMessage(course.id, studentTurn);
       const { reply, degraded } = await askCourseChat(request);
 
       const duckTurn: CourseChatMessage = {
@@ -142,7 +159,7 @@ export const CourseChatDrawer: React.FC = () => {
         else setError(err?.message || 'تعذر الوصول إلى كواكلي. حاول مرة ثانية.');
       }
     } finally {
-      setSendingCourseId((prev) => (prev === course.id ? null : prev));
+      markSending(course.id, false);
     }
   };
 
@@ -158,8 +175,10 @@ export const CourseChatDrawer: React.FC = () => {
   const handleClear = async () => {
     if (!courseId || messages.length === 0) return;
     if (!window.confirm('مسح محادثة هذه المادة بالكامل؟')) return;
-    await chatStore.clearThread(courseId);
-    setThread({ courseId, messages: [] });
+    const clearedCourseId = courseId;
+    await chatStore.clearThread(clearedCourseId);
+    // The student may have switched courses during the await; never overwrite another course's thread.
+    setThread((prev) => (prev.courseId === clearedCourseId ? { courseId: clearedCourseId, messages: [] } : prev));
   };
 
   return (

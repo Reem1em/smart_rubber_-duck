@@ -1,9 +1,10 @@
-import { CodeLabResponse } from '../../types';
+import { CodeLabResponse, CourseScope } from '../../types';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 export async function generateCodeLab(data: {
   language?: string;
   topic?: string;
+  courseScope?: CourseScope;
 }): Promise<CodeLabResponse> {
   const response = await fetchWithTimeout('/generate-code-lab', {
     method: 'POST',

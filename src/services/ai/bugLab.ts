@@ -1,9 +1,10 @@
-import { BugChallengeResponse, BugEvaluationResponse } from '../../types';
+import { BugChallengeResponse, BugEvaluationResponse, CodeExecutionReport, CourseScope } from '../../types';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 export async function generateBugChallenge(data: {
   language?: string;
   difficulty?: string;
+  courseScope?: CourseScope;
 }): Promise<BugChallengeResponse> {
   const response = await fetchWithTimeout('/generate-bug-challenge', {
     method: 'POST',
@@ -24,6 +25,9 @@ export async function evaluateBugChallenge(data: {
   userFixDescription: string;
   expectedBehavior: string;
   language?: string;
+  courseScope?: CourseScope;
+  /** Real Pyodide results of the fixed code (Python only). */
+  execution?: CodeExecutionReport;
 }): Promise<BugEvaluationResponse> {
   const response = await fetchWithTimeout('/evaluate-bug-challenge', {
     method: 'POST',

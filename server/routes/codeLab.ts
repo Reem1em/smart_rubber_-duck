@@ -6,14 +6,17 @@ import { parseModelJson } from '../modelJson';
 import { buildCodeLabPrompt } from '../prompts/codeLab';
 import { codeLabSchema } from '../schemas/codeLab';
 import { codeLabFallback } from '../fallbacks/codeLab';
+import { buildLabScopeBlock, resolveCourseScope } from '../courseScope';
 
 export const handleGenerateCodeLab = async (req: Request, res: Response) => {
   try {
     const { language, topic } = req.body;
+    const scoped = await resolveCourseScope(req);
+    if ('error' in scoped) return res.status(400).json({ error: scoped.error });
     const lang = language || 'Java / Python / C++';
-    const top = topic || 'Software Engineering / Computer Science Concepts';
+    const top = topic || scoped.scope?.courseTitle || 'Software Engineering / Computer Science Concepts';
 
-    const prompt = buildCodeLabPrompt({ lang, top });
+    const prompt = buildCodeLabPrompt({ lang, top, scopeBlock: buildLabScopeBlock(scoped.scope) });
 
     const response = await generateInteractive({
       contents: prompt,

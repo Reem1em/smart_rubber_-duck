@@ -28,9 +28,10 @@ export async function fetchWithTimeout(
 
     if (response.status === 503) {
       const errData = await response.json().catch(() => ({}));
+      // `message` first: assessment 503s put the student-facing Arabic text there.
       const msg =
-        errData.error ||
         errData.message ||
+        errData.error ||
         'خوادم الذكاء الاصطناعي تشهد ضغطاً مؤقتاً. يرجى المحاولة مرة أخرى.';
       const err = new Error(msg);
       (err as any).isServerOverload = true;

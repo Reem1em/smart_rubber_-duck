@@ -1,5 +1,10 @@
 /** Generates three practice projects (Easy / Intermediate / Advanced). */
-export function buildCodeLabPrompt({ lang, top }: { lang: string; top: string }): string {
+export function buildCodeLabPrompt({ lang, top, scopeBlock = '' }: {
+  lang: string;
+  top: string;
+  /** Course isolation rules from buildLabScopeBlock ('' outside a course). */
+  scopeBlock?: string;
+}): string {
   const prompt = `You are an expert AI mentor in Computer Engineering and Software Engineering.
 Generate 3 COMPLETELY UNIQUE practice projects for language/topic: "${lang} - ${top}".
 Tailor them strictly to three distinct difficulty levels:
@@ -32,5 +37,5 @@ Output JSON strictly following this schema:
   ]
 }`;
 
-  return prompt;
+  return scopeBlock ? `${scopeBlock}\n\n${prompt}` : prompt;
 }

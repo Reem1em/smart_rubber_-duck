@@ -1,7 +1,15 @@
+import type { CodeExecutionReport } from '../../src/types';
 import { MATH_ENGINE_DIRECTIVES } from '../stem';
+import { buildExecutionBlock } from '../execution';
 
 /** Math bug-hunting challenge for math topics, code bug-hunting otherwise. */
-export function buildBugChallengePrompt({ isMath, lang, diff }: { isMath: boolean; lang: string; diff: string }): string {
+export function buildBugChallengePrompt({ isMath, lang, diff, scopeBlock = '' }: {
+  isMath: boolean;
+  lang: string;
+  diff: string;
+  /** Course isolation rules from buildLabScopeBlock ('' outside a course). */
+  scopeBlock?: string;
+}): string {
   const prompt = isMath
         ? `أنت "كواكلي" (Quakly)، محرك الرياضيات (Math Engine) والمدرب التفاعلي في نمط (صيد الخطأ الحسابي - Math Bug-Hunting).
 ولّد تحدياً رياضياً عددياً واحداً في مجال: "${lang}" بمستوى: "${diff}".
@@ -41,15 +49,19 @@ Return raw JSON strictly matching this schema:
   }
 }`;
 
-  return prompt;
+  return scopeBlock ? `${scopeBlock}\n\n${prompt}` : prompt;
 }
 
 /** Grades the description of the bugs the student claims to have found. */
-export function buildBugEvaluationPrompt({ buggyCode, userFixDescription, expectedBehavior, isMath }: {
+export function buildBugEvaluationPrompt({ buggyCode, userFixDescription, expectedBehavior, isMath, scopeBlock = '', execution = null }: {
   buggyCode?: string;
   userFixDescription?: string;
   expectedBehavior?: string;
   isMath?: boolean;
+  /** Course isolation rules from buildLabScopeBlock ('' outside a course). */
+  scopeBlock?: string;
+  /** Real Pyodide results of the student's fixed code; null when nothing was executed. */
+  execution?: CodeExecutionReport | null;
 }): string {
   const prompt = `أنت "كواكلي" (Quakly)، مراجع الأخطاء الحسابية والبرمجية.
 المسألة أو الكود الذي به أخطاء:
@@ -60,7 +72,11 @@ ${expectedBehavior}
 
 شرح الطالب للأخطاء والتصحيح:
 ${userFixDescription}
-
+${execution ? `\n${buildExecutionBlock(execution)}\n${
+    execution.executionSuccess
+      ? ''
+      : 'executionSuccess = false: اجعل score أقل من 60، واجعل summary سؤالاً سقراطياً يقود الطالب لسبب الخطأ الفعلي، واترك correctedCode فارغاً "".\n'
+  }` : ''}
 المهمة:
 قيّم بدقة هل اكتشف الطالب الخطأ الحسابي أو المنطقي بشكل صحيح.
 قدم تقييماً مشجعاً ومباشراً باللغة العربية الفصحى بدون مقدمات طويلة.
@@ -78,5 +94,5 @@ JSON Schema:
   "correctedCode": "الحل الحسابي أو الكود المصحح النظيف"
 }`;
 
-  return prompt;
+  return scopeBlock ? `${scopeBlock}\n\n${prompt}` : prompt;
 }

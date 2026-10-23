@@ -51,16 +51,43 @@ export function handleModelFailure(
     });
   }
 
-  if (isQuotaOrRateLimitError(err)) {
-    console.error(`[${context}] Gemini quota / rate limit (HTTP ${status ?? 429}): ${detail}`);
-    return res.status(429).json({
-      error:
-        'تم استهلاك حصة الاستخدام المتاحة من نموذج Gemini. انتظر حتى تتجدد الحصة أو فعّل الفوترة في مشروعك.',
-      isRateLimit: true,
-      detail,
-    });
-  }
+  if (isQuotaOrRateLimitError(err)) return sendRateLimit(res, context, status, detail);
 
   console.error(`[${context}] model call failed (HTTP ${status ?? 'n/a'}): ${detail}`);
   return res.json(fallback());
+}
+
+/** Real 429 so the client's RateLimitModal fires. */
+function sendRateLimit(res: Response, context: string, status: number | undefined, detail: string) {
+  console.error(`[${context}] Gemini quota / rate limit (HTTP ${status ?? 429}): ${detail}`);
+  return res.status(429).json({
+    error:
+      'تم استهلاك حصة الاستخدام المتاحة من نموذج Gemini. انتظر حتى تتجدد الحصة أو فعّل الفوترة في مشروعك.',
+    isRateLimit: true,
+    detail,
+  });
+}
+
+/** Body of every assessment failure; `message` is what the student sees. */
+export const ASSESSMENT_UNAVAILABLE = {
+  error: 'Service Unavailable',
+  message: 'تعذر الاتصال بالخادم الذكي. لا يمكن تقييم الإجابة حالياً، يرجى المحاولة مرة أخرى.',
+} as const;
+
+/**
+ * Exit point for a failed model call on an ASSESSMENT route (explanation diagnosis,
+ * Socratic grading, quiz discussion, final report, code/bug evaluation).
+ *
+ * Never serves a canned payload: a hard-coded score, verdict or "passed" flag would be a
+ * fabricated evaluation of work the model never saw. Quota errors keep their 429 so the
+ * quota modal still fires; every other failure is an explicit 503.
+ */
+export function handleAssessmentFailure(res: Response, context: string, err: any) {
+  const status = statusOf(err);
+  const detail = detailOf(err);
+
+  if (isQuotaOrRateLimitError(err)) return sendRateLimit(res, context, status, detail);
+
+  console.error(`[${context}] assessment unavailable (HTTP ${status ?? 'n/a'}): ${detail}`);
+  return res.status(503).json(ASSESSMENT_UNAVAILABLE);
 }

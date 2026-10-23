@@ -4,7 +4,18 @@ import { useAppState } from '../context/AppStateContext';
 import { generateDevChallenge, evaluateDevSubmission, evaluateCustomLab } from '../services/ai';
 import { isRateLimitError } from '../utils/rateLimit';
 import { useMicrophone } from '../hooks/useMicrophone';
-import { CustomLabEvaluation, CustomLabTestCase, DevChallenge, DevEvaluation, DevLabLevel, DevLabMode } from '../types';
+import { courseScopeOf } from '../services/courseScope';
+import { isPythonLanguage, preloadPython, runSubmission, runTestCases } from '../services/pyodideRunner';
+import {
+  CodeExecutionReport,
+  CustomLabEvaluation,
+  CustomLabTestCase,
+  CustomLabTestRun,
+  DevChallenge,
+  DevEvaluation,
+  DevLabLevel,
+  DevLabMode,
+} from '../types';
 import { DuckCharacter } from './DuckCharacter';
 import {
   Code2,
@@ -68,7 +79,9 @@ function challengeAsText(c: DevChallenge): string {
 }
 
 export const CodeLabPanel: React.FC = () => {
-  const { setStep, setDuckState, showRateLimitModal } = useAppState();
+  const { setStep, setDuckState, showRateLimitModal, activeCourse } = useAppState();
+  // Labs opened inside a course are grounded to that course only; outside a course they stay general.
+  const courseScope = courseScopeOf(activeCourse);
 
   const [mode, setMode] = useState<DevLabMode>('builder');
   const [language, setLanguage] = useState('Python');
@@ -78,6 +91,8 @@ export const CodeLabPanel: React.FC = () => {
   const [studentCode, setStudentCode] = useState('');
   const [studentExplanation, setStudentExplanation] = useState('');
   const [evaluation, setEvaluation] = useState<DevEvaluation | null>(null);
+  /** Real Pyodide results of the last Builder / Bug-Hunter submission. */
+  const [execution, setExecution] = useState<CodeExecutionReport | null>(null);
 
   // Custom Lab Assignment state
   const [customTaskPrompt, setCustomTaskPrompt] = useState('');
@@ -89,6 +104,8 @@ export const CodeLabPanel: React.FC = () => {
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
+  /** True while the code itself is running, before the duck reviews it. */
+  const [isRunningCode, setIsRunningCode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -99,6 +116,24 @@ export const CodeLabPanel: React.FC = () => {
     if (isListening && transcript) setStudentExplanation(transcript);
   }, [transcript, isListening]);
 
+  // Warm the Python runtime as soon as Python is selected, so the first check isn't a cold start.
+  const pythonSelected = isPythonLanguage(mode === 'customLab' ? customLanguage : language);
+  React.useEffect(() => {
+    if (pythonSelected) preloadPython();
+  }, [pythonSelected]);
+
+  // A challenge generated for one course must never be graded under another: purge on course switch.
+  const activeCourseId = activeCourse?.id ?? null;
+  React.useEffect(() => {
+    setChallenge(null);
+    setEvaluation(null);
+    setExecution(null);
+    setCustomEvaluation(null);
+    setStudentCode('');
+    setStudentExplanation('');
+    setError(null);
+  }, [activeCourseId]);
+
   const isBugHunter = mode === 'bugHunter';
   const isCustomLab = mode === 'customLab';
 
@@ -107,6 +142,7 @@ export const CodeLabPanel: React.FC = () => {
     setMode(next);
     setChallenge(null);
     setEvaluation(null);
+    setExecution(null);
     setStudentCode('');
     setStudentExplanation('');
     setError(null);
@@ -117,12 +153,13 @@ export const CodeLabPanel: React.FC = () => {
     setIsGenerating(true);
     setError(null);
     setEvaluation(null);
+    setExecution(null);
     setStudentCode('');
     setStudentExplanation('');
     setDuckState('thinking');
 
     try {
-      const res = await generateDevChallenge({ mode, language, level });
+      const res = await generateDevChallenge({ mode, language, level, courseScope });
       setChallenge(res);
       // Bug-Hunter starts from the snippet so the student edits it in place.
       if (res.mode === 'bugHunter' && res.buggyCode) setStudentCode(res.buggyCode);
@@ -148,9 +185,23 @@ export const CodeLabPanel: React.FC = () => {
 
     setIsEvaluating(true);
     setError(null);
+    setEvaluation(null);
+    setExecution(null);
     setDuckState('thinking');
 
     try {
+      // FIRST run the code for real; the grader then treats these results as truth.
+      let report: CodeExecutionReport | undefined;
+      if (isPythonLanguage(language) && studentCode.trim()) {
+        setIsRunningCode(true);
+        try {
+          report = await runSubmission(studentCode, challenge.sampleIO);
+        } finally {
+          setIsRunningCode(false);
+        }
+        setExecution(report);
+      }
+
       const res = await evaluateDevSubmission({
         mode,
         language,
@@ -158,6 +209,8 @@ export const CodeLabPanel: React.FC = () => {
         challenge: challengeAsText(challenge),
         studentCode,
         studentExplanation,
+        courseScope,
+        execution: report,
       });
       setEvaluation(res);
       setDuckState(res.score !== null && res.score >= 80 ? 'proud' : 'encouraging');
@@ -213,12 +266,25 @@ export const CodeLabPanel: React.FC = () => {
     setDuckState('thinking');
 
     try {
+      // FIRST run every test case for real; pass/fail then comes from execution, not the model.
+      let testRuns: CustomLabTestRun[] | undefined;
+      if (isPythonLanguage(customLanguage)) {
+        setIsRunningCode(true);
+        try {
+          testRuns = await runTestCases(customCode, validTests);
+        } finally {
+          setIsRunningCode(false);
+        }
+      }
+
       const res = await evaluateCustomLab({
         taskPrompt: customTaskPrompt,
         language: customLanguage,
         testCases: validTests,
         constraints: customConstraints,
         studentCode: customCode,
+        courseScope,
+        testRuns,
       });
       setCustomEvaluation(res);
       setDuckState(res.allPassed ? 'proud' : 'encouraging');
@@ -547,7 +613,7 @@ export const CodeLabPanel: React.FC = () => {
               {isEvaluating ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>كواكلي يراجع كودك...</span>
+                  <span>{isRunningCode ? 'جاري تشغيل الكود فعلياً...' : 'كواكلي يراجع كودك...'}</span>
                 </>
               ) : (
                 <>
@@ -723,7 +789,7 @@ export const CodeLabPanel: React.FC = () => {
               {isEvaluating ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>كواكلي يراجع كودك...</span>
+                  <span>{isRunningCode ? 'جاري تشغيل الكود فعلياً...' : 'كواكلي يراجع كودك...'}</span>
                 </>
               ) : (
                 <>
@@ -749,6 +815,7 @@ export const CodeLabPanel: React.FC = () => {
             <div className="flex items-center gap-2">
               <Award className="w-5 h-5 text-amber-600" />
               <h3 className="text-lg font-black text-slate-900 dark:text-slate-100">تقييم كواكلي</h3>
+              <VerificationBadge verified={!!evaluation.verifiedByExecution} />
             </div>
             {evaluation.score === null || !evaluation.mastery ? (
               <span className="px-2.5 py-1 rounded-full text-xs font-extrabold border bg-slate-100 text-slate-700 border-slate-300">
@@ -771,6 +838,8 @@ export const CodeLabPanel: React.FC = () => {
           <p className="text-sm font-bold text-slate-800 dark:text-slate-200 bg-amber-50/80 dark:bg-slate-800/60 p-3.5 rounded-xl border border-amber-200/70 dark:border-slate-700 leading-relaxed">
             {evaluation.verdict}
           </p>
+
+          {execution && <ExecutionReportCard report={execution} />}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FeedbackList
@@ -858,6 +927,7 @@ const CustomLabResultsCard: React.FC<{ evaluation: CustomLabEvaluation }> = ({ e
         <div className="flex items-center gap-2">
           <FlaskConical className="w-5 h-5 text-violet-600" />
           <h3 className="text-lg font-black text-slate-900 dark:text-slate-100">نتائج التحقق</h3>
+          <VerificationBadge verified={!!evaluation.verifiedByExecution} />
         </div>
         <div className="flex items-center gap-2">
           <span
@@ -1004,6 +1074,63 @@ const CustomLabResultsCard: React.FC<{ evaluation: CustomLabEvaluation }> = ({ e
     </motion.div>
   );
 };
+
+/* ===================================================================
+   Execution (real Pyodide run) — shared by Builder / Bug-Hunter
+   =================================================================== */
+
+/** Tells the student whether results came from running the code or are the duck's estimate. */
+const VerificationBadge: React.FC<{ verified: boolean }> = ({ verified }) => (
+  <span
+    className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold border ${
+      verified
+        ? 'bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+        : 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+    }`}
+    title={verified ? 'شُغّل الكود فعلياً في متصفحك' : 'هذه اللغة لا تُشغَّل في المتصفح؛ التقييم تقديري'}
+  >
+    {verified ? 'مُنفَّذ فعلياً' : 'تقييم تقديري (لم يُنفَّذ)'}
+  </span>
+);
+
+const ExecutionReportCard: React.FC<{ report: CodeExecutionReport }> = ({ report }) => (
+  <div
+    className={`rounded-xl border p-3.5 space-y-2 ${
+      report.executionSuccess
+        ? 'bg-emerald-50/60 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900'
+        : 'bg-rose-50/60 border-rose-200 dark:bg-rose-950/20 dark:border-rose-900'
+    }`}
+  >
+    <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-900 dark:text-slate-100">
+      <Terminal className="w-3.5 h-3.5" />
+      <span>نتيجة التشغيل الفعلي</span>
+      <span>{report.executionSuccess ? '✅' : '❌'}</span>
+    </div>
+    {report.consoleErrors && (
+      <pre dir="ltr" className="p-2.5 rounded-lg bg-slate-950 text-rose-300 font-mono text-xs whitespace-pre-wrap break-all text-left">
+        {report.consoleErrors}
+      </pre>
+    )}
+    {report.actualOutput && (
+      <pre dir="ltr" className="p-2.5 rounded-lg bg-slate-950 text-emerald-200 font-mono text-xs whitespace-pre-wrap break-all text-left max-h-48 overflow-y-auto">
+        {report.actualOutput}
+      </pre>
+    )}
+    {report.sampleChecks.length > 0 && (
+      <ul className="space-y-1 text-xs font-mono" dir="ltr">
+        {report.sampleChecks.map((c, i) => (
+          <li key={i} className="flex gap-2 text-left">
+            <span>{c.passed ? '✅' : '❌'}</span>
+            <span className="break-all">
+              {c.expression} → {c.error ? c.error : c.actual}
+              {!c.passed && !c.error && ` (expected ${c.expected})`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+);
 
 /* ===================================================================
    Shared Feedback List (reused across modes)

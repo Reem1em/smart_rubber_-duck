@@ -1,4 +1,4 @@
-import { ProjectReviewResponse } from '../../types';
+import { CourseScope, ProjectReviewResponse } from '../../types';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 export async function reviewProject(data: {
@@ -6,6 +6,7 @@ export async function reviewProject(data: {
   codeSnippet?: string;
   projectRequest?: string;
   studentLevel?: string;
+  courseScope?: CourseScope;
 }): Promise<ProjectReviewResponse> {
   const response = await fetchWithTimeout('/review-project', {
     method: 'POST',

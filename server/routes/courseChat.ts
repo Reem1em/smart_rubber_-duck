@@ -12,6 +12,7 @@ import {
 import { courseChatFallback } from '../fallbacks/courseChat';
 import { bearerToken, verifySession } from '../auth/session';
 import { getUserCourse } from '../auth/courseStore';
+import { ZERO_HALLUCINATION_MANDATE, resolveCourseScope } from '../courseScope';
 
 const normalizeHistory = (raw: unknown): CourseChatTurn[] =>
   Array.isArray(raw)
@@ -72,12 +73,20 @@ export const handleCourseChat = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'اكتب سؤالك أولاً حتى أقدر أشرح لك.' });
     }
 
+    // The URL's course id is authoritative; title and concepts come from the server copy when one exists.
+    const scoped = await resolveCourseScope(req, {
+      courseId,
+      courseTitle: req.body?.courseTitle,
+      conceptNames: req.body?.conceptNames,
+    });
+    if ('error' in scoped || !scoped.scope) {
+      return res.status(400).json({ error: 'error' in scoped ? scoped.error : 'معرّف المادة مطلوب.' });
+    }
+
     const grounding = sanitizeGrounding(req.body);
     const prompt = buildCourseChatPrompt({
-      courseTitle: String(req.body?.courseTitle || 'المادة الدراسية'),
-      conceptNames: Array.isArray(req.body?.conceptNames)
-        ? req.body.conceptNames.map((n: unknown) => String(n)).filter(Boolean)
-        : [],
+      courseTitle: scoped.scope.courseTitle,
+      conceptNames: scoped.scope.conceptNames,
       focusConcept: normalizeFocusConcept(req.body?.focusConcept),
       history: normalizeHistory(req.body?.history),
       message,
@@ -87,7 +96,7 @@ export const handleCourseChat = async (req: Request, res: Response) => {
     const response = await generateInteractive({
       contents: prompt,
       config: {
-        systemInstruction: COURSE_CHAT_SYSTEM_INSTRUCTION,
+        systemInstruction: `${COURSE_CHAT_SYSTEM_INSTRUCTION}\n\n${ZERO_HALLUCINATION_MANDATE}`,
         temperature: 0.4,
         maxOutputTokens: 1000,
       },

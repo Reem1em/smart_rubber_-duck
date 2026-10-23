@@ -1,4 +1,4 @@
-import type { CustomLabTestCase, DevLabMode } from '../prompts/devLab';
+import type { DevLabMode } from '../prompts/devLab';
 
 /** Static payloads served when every model in the chain fails. */
 export function devChallengeFallback(body: any) {
@@ -67,38 +67,5 @@ def top_students(scores, threshold):
     buggyCode: '',
     bugCategory: '',
     voicePrompt: 'قبل ما تكتب سطر واحد، اشرح لي بصوتك: وش خطتك وأول خطوة راح تبدأ فيها وليه؟',
-  };
-}
-
-/** Unrated: no score, mastery or invented feedback for code the judge never saw. */
-export function devEvaluationFallback() {
-  return {
-    score: null,
-    verdict: 'كواك! السيرفرات زحمة فما قدرت أقيّم حلك الحين — كودك محفوظ، جرّب "تحقق" مرة ثانية بعد شوي.',
-    whatWorked: [],
-    flaws: [],
-    edgeCaseResilience: [],
-    codeQuality: [],
-    improvedCode: '',
-    mastery: null,
-  };
-}
-
-/** Marks every case unverified rather than failed — the judge never saw the code. */
-export function customLabEvaluationFallback(testCases: CustomLabTestCase[]) {
-  return {
-    testResults: testCases.map((tc, i) => ({
-      testIndex: i,
-      input: tc.input,
-      expectedOutput: tc.expectedOutput,
-      actualOutput: '(تعذر التحقق)',
-      passed: false,
-    })),
-    allPassed: false,
-    unverified: true,
-    rootCauseAnalysis: '',
-    constraintNotes: [],
-    hint: 'كواك! الحكم الآلي مشغول الحين — جرّب كودك يدوياً على حالات الاختبار وأعد المحاولة بعد شوي.',
-    edgeCaseChallenge: '',
   };
 }

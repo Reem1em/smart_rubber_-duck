@@ -1,9 +1,11 @@
 /** Practical Project Lab: designs a project and/or reviews submitted code. */
-export function buildProjectReviewPrompt({ subjectName, codeSnippet, projectRequest, studentLevel }: {
+export function buildProjectReviewPrompt({ subjectName, codeSnippet, projectRequest, studentLevel, scopeBlock = '' }: {
   subjectName?: string;
   codeSnippet?: string;
   projectRequest?: string;
   studentLevel?: string;
+  /** Course isolation rules from buildLabScopeBlock ('' outside a course). */
+  scopeBlock?: string;
 }): string {
   const prompt = `أنت الخبير الهندسي ومراجع البرمجيات ومصمم التحديات البرمجية الأكاديمية.
 المهمة:
@@ -27,5 +29,5 @@ ${codeSnippet ? `قم بمراجعة كود الطالب المقدم في ما�
   "improvedCodeSnippet": "// الكود المصحح والمحسن بالنكهة الاحترافية"
 }`;
 
-  return prompt;
+  return scopeBlock ? `${scopeBlock}\n\n${prompt}` : prompt;
 }
