@@ -13,6 +13,7 @@ export function buildQuizDiscussionPrompt({
   newMessage,
   conceptName,
   isStem,
+  courseScopeBlock,
 }: {
   question: string;
   correctOptionText: string;
@@ -25,6 +26,8 @@ export function buildQuizDiscussionPrompt({
   newMessage: string;
   conceptName: string;
   isStem?: boolean;
+  /** Course isolation rules from buildCourseScopeBlock. */
+  courseScopeBlock: string;
 }): string {
   const mathRules = isStem
     ? `\nجميع الصيغ الرياضية في ردك تلتزم بقواعد العزل: $...$  للرموز الضمنية، و $$...$$ للمعادلات المستقلة في سطر منفرد محاط بسطر فارغ.\n`
@@ -36,6 +39,8 @@ export function buildQuizDiscussionPrompt({
 
   return `أنت "كواكلي" (Quakly)، المعلم الأكاديمي الذكي. الطالب يناقشك حول نفس السؤال بعد تقييم إجابته.
 المفهوم: "${conceptName}"
+
+${courseScopeBlock}
 ${mathRules}
 --- السؤال الأصلي ---
 ${question}
@@ -70,6 +75,7 @@ ${historyText || '(لا يوجد سجل سابق)'}
 5. إذا طلب تلميحاً: قدم تلميحاً موجهاً.
 6. اللغة: عربية أكاديمية فصيحة، مشجعة، واضحة.
 7. لا تولد سؤالاً جديداً ولا تنتقل لموضوع آخر.
+8. هذا نقاش حول سؤال اختيار من متعدد وليس جلسة شرح: لا تحلل أسلوب الطالب، ولا تُعدّ له قائمة فجوات مفاهيمية، ولا تستدرجه بأسئلة سقراطية متتالية. رد مباشر في 2-4 جمل.
 
 أجب على رسالة الطالب بشكل مباشر، مفيد، وأكاديمي دقيق.`;
 }

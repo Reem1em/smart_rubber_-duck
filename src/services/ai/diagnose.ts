@@ -1,5 +1,6 @@
 import {
   Concept,
+  CourseScope,
   DiagnosisResult,
   FinalDiagnosisResult,
   QuizQuestion,
@@ -12,7 +13,8 @@ export async function diagnoseExplanation(
   concept: Concept,
   studentExplanation: string,
   confidenceLevel: number,
-  materialContext?: string
+  materialContext?: string,
+  courseScope?: CourseScope
 ): Promise<DiagnosisResult> {
   const response = await fetchWithTimeout('/api/diagnose', {
     method: 'POST',
@@ -22,6 +24,7 @@ export async function diagnoseExplanation(
       studentExplanation,
       confidenceLevel,
       materialContext,
+      courseScope,
     }),
   });
 
@@ -37,7 +40,8 @@ export async function evaluateSocraticAnswer(
   concept: Concept,
   initialExplanation: string,
   socraticQuestion: string,
-  socraticAnswer: string
+  socraticAnswer: string,
+  courseScope?: CourseScope
 ): Promise<{ evaluation: SocraticEvaluation; transferChallenge: TransferChallenge }> {
   const response = await fetchWithTimeout('/api/socratic-eval', {
     method: 'POST',
@@ -47,6 +51,7 @@ export async function evaluateSocraticAnswer(
       initialExplanation,
       socraticQuestion,
       socraticAnswer,
+      courseScope,
     }),
   });
 
@@ -56,12 +61,16 @@ export async function evaluateSocraticAnswer(
   }
 
   const data = await response.json();
+  const strings = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string' && s.trim().length > 0) : [];
   return {
     evaluation: {
       socraticAnswer,
       reasoningQualityScore: data.reasoningQualityScore,
       improvedUnderstanding: data.improvedUnderstanding,
       duckReaction: data.duckReaction,
+      correctPoints: strings(data.correctPoints),
+      conceptualGaps: strings(data.conceptualGaps),
     },
     transferChallenge: data.transferChallenge,
   };
@@ -71,7 +80,8 @@ export async function generateQuiz(
   concept: Concept,
   studentExplanation?: string,
   transferAnswer?: string,
-  materialContext?: string
+  materialContext?: string,
+  courseScope?: CourseScope
 ): Promise<QuizQuestion[]> {
   const response = await fetchWithTimeout('/api/generate-quiz', {
     method: 'POST',
@@ -81,6 +91,7 @@ export async function generateQuiz(
       studentExplanation,
       transferAnswer,
       materialContext,
+      courseScope,
     }),
   });
 
@@ -100,7 +111,8 @@ export async function generateFinalDiagnosis(
   transferChallenge: TransferChallenge,
   transferAnswer: string,
   quizScore?: number,
-  quizTotal?: number
+  quizTotal?: number,
+  courseScope?: CourseScope
 ): Promise<FinalDiagnosisResult> {
   const response = await fetchWithTimeout('/api/final-diagnosis', {
     method: 'POST',
@@ -113,6 +125,7 @@ export async function generateFinalDiagnosis(
       transferAnswer,
       quizScore,
       quizTotal,
+      courseScope,
     }),
   });
 

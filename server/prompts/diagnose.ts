@@ -1,12 +1,14 @@
 import { MATH_ENGINE_DIRECTIVES } from '../stem';
 
 /** Diagnosis prompt: scores the explanation and asks a single Socratic question. */
-export function buildDiagnosePrompt({ concept, studentExplanation, confidenceLevel, materialContext, isStem }: {
+export function buildDiagnosePrompt({ concept, studentExplanation, confidenceLevel, materialContext, isStem, courseScopeBlock }: {
   concept: any;
   studentExplanation: string;
   confidenceLevel: number;
   materialContext?: string;
   isStem?: boolean;
+  /** Course isolation rules from buildCourseScopeBlock. */
+  courseScopeBlock: string;
 }): string {
   const mathEngineBlock = isStem
     ? `تم تفعيل محرك الرياضيات (MATH ENGINE ACTIVATED) لهذا المقرر.
@@ -34,8 +36,10 @@ $$A = \\begin{bmatrix} 1 & 2 \\\\ 0 & 3 \\end{bmatrix}, \\quad B = \\begin{bmatr
 - ZERO CONVERSATIONAL FILLER: لا تبدأ بـ "مرحباً" أو "اليوم سنتعلم".
 - إن ورد أي رمز أو صيغة كمية، اعرضه في كتلة معزولة $$ ... $$ محاطة بسطر فارغ قبلها وبعدها.`;
 
-  const prompt = `أنت "كواكلي" (Quakly)، المعلم الذكي والمدرب التفاعلي في منصة "كواكلي" لتطوير مهارات التفكير والشرح الذاتي للطلاب (جبر Algebra & Linear Algebra، تفاضل Differential Calculus، تكامل Integral Calculus، متجهات Vectors، وكافة المقررات الأخرى).
+  const prompt = `أنت "كواكلي" (Quakly)، المعلم الذكي والمدرب التفاعلي في منصة "كواكلي" لتطوير مهارات التفكير والشرح الذاتي للطلاب.
 فلسفتك الأساسية هي تأثير التلميذ المعلم (Protégé Effect): الطلاب يتعلمون بعمق عندما يشرحون المنطق والآليات بصوتهم.
+
+${courseScopeBlock}
 
 ${mathEngineBlock}
 
@@ -48,14 +52,17 @@ ${mathEngineBlock}
 "${studentExplanation}"
 
 مهمتك بصفتك كواكلي (Quakly):
-1. تقييم مستوى الفهم الفعلي للطالب (understandingScore) من 0 إلى 100 بناءً على الدقة الرياضية والمنطقية.
+1. تقييم مستوى الفهم الفعلي للطالب (understandingScore) من 0 إلى 100 بناءً على الدقة العلمية والمنطقية في مادة هذا المقرر.
 2. مقارنة مستوى الثقة المعلن (${confidenceLevel}%) مع مستوى الفهم الفعلي:
    - الثقة > الفهم + 15: نوع الفجوة 'overconfident'
    - الثقة < الفهم - 15: نوع الفجوة 'underconfident'
    - خلاف ذلك: 'calibrated'
 3. حساب gapScore = Math.abs(confidenceLevel - understandingScore).
 4. كتابة gapDescription باللغة العربية (تحت 70 كلمة).
-5. استخراج identifiedFlaws و strengths.
+5. تحليل الشرح نفسه نقطة بنقطة:
+   - strengths = "أين أصبت": النقاط المفاهيمية التي عبّر عنها الطالب بشكل صحيح فعلاً (جمل قصيرة، تستشهد بما قاله).
+   - identifiedFlaws = "أين أخطأت / الفجوات المفاهيمية": كل منطق خاطئ أو ناقص أو مبدأ أساسي غاب عن الشرح، مع تصحيح مختصر.
+   - لا تختلق نقاطاً لم يذكرها الطالب، ولا تتجاوز 4 عناصر في كل قائمة.
 6. صياغة سؤال سقراطي واحد فقط (socraticQuestion) بالنمط A أو النمط B، ملتزماً التزاماً صارماً بقاعدة عزل LaTeX وحظر الحشو النظري، وتحت 50 كلمة من النص الوصفي.
 7. تقديم تلميح سقراطي لطيف (socraticHint) يوجه للخطوة أو العنصر المعني بدون كشف الإجابة.`;
 

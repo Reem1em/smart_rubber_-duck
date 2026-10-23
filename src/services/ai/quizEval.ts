@@ -1,4 +1,4 @@
-import type { Concept, QuizQuestion, QuizAnswerEvaluation, QuizDiscussionMessage } from '../../types';
+import type { Concept, CourseScope, QuizQuestion, QuizAnswerEvaluation, QuizDiscussionMessage } from '../../types';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 /**
@@ -13,6 +13,7 @@ export async function discussQuizAnswer(params: {
   previousEvaluation: QuizAnswerEvaluation;
   conversationHistory: Pick<QuizDiscussionMessage, 'role' | 'text'>[];
   newMessage: string;
+  courseScope?: CourseScope;
 }): Promise<{ reply: string; degraded?: boolean }> {
   const response = await fetchWithTimeout('/api/quiz/discuss', {
     method: 'POST',

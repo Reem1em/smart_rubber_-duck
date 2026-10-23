@@ -1,5 +1,5 @@
 /** Final mastery report prompt, combining every stage of the session. */
-export function buildFinalDiagnosisPrompt({ conceptName, statedConfidence, understandingScore, diagnosis, socraticAnswer, transferAnswer, quiz }: {
+export function buildFinalDiagnosisPrompt({ conceptName, statedConfidence, understandingScore, diagnosis, socraticAnswer, transferAnswer, quiz, courseScopeBlock }: {
   conceptName: string;
   statedConfidence: number | null;
   understandingScore: number | null;
@@ -7,12 +7,17 @@ export function buildFinalDiagnosisPrompt({ conceptName, statedConfidence, under
   socraticAnswer?: string;
   transferAnswer?: string;
   quiz: { score: number; total: number } | null;
+  /** Course isolation rules from buildCourseScopeBlock. */
+  courseScopeBlock: string;
 }): string {
   const pct = (v: number | null) => (v === null ? 'غير مقيّم' : `${v}%`);
   const quizLine = quiz
     ? `${quiz.score} من ${quiz.total} (${Math.round((quiz.score / quiz.total) * 100)}%)`
     : 'لم يُستكمل';
   const prompt = `أنت البطة السقراطية التعلمية وخبير التقييم التربوي.
+
+${courseScopeBlock}
+
 المفهوم المستهدف: "${conceptName}"
 بيانات التشخيص الأولي:
 - الثقة المعلنة: ${pct(statedConfidence)}

@@ -6,6 +6,7 @@ import { parseModelJson } from '../modelJson';
 import { buildFinalDiagnosisPrompt } from '../prompts/finalDiagnosis';
 import { finalDiagnosisSchema } from '../schemas/finalDiagnosis';
 import { finalDiagnosisFallback } from '../fallbacks/finalDiagnosis';
+import { buildCourseScopeBlock, resolveCourseScope } from '../courseScope';
 
 export const handleFinalDiagnosis = async (req: Request, res: Response) => {
   try {
@@ -19,6 +20,9 @@ export const handleFinalDiagnosis = async (req: Request, res: Response) => {
       quizTotal,
     } = req.body;
 
+    const scoped = await resolveCourseScope(req);
+    if ('error' in scoped) return res.status(400).json({ error: scoped.error });
+
     const conceptName = concept?.name || 'المفهوم المدروس';
     // Missing signals stay null so the model is never fed invented scores.
     const numOrNull = (v: unknown) => (typeof v === 'number' ? v : null);
@@ -28,7 +32,16 @@ export const handleFinalDiagnosis = async (req: Request, res: Response) => {
       ? { score: quizScore, total: quizTotal }
       : null;
 
-    const prompt = buildFinalDiagnosisPrompt({ conceptName, statedConfidence, understandingScore, diagnosis, socraticAnswer, transferAnswer, quiz });
+    const prompt = buildFinalDiagnosisPrompt({
+      conceptName,
+      statedConfidence,
+      understandingScore,
+      diagnosis,
+      socraticAnswer,
+      transferAnswer,
+      quiz,
+      courseScopeBlock: buildCourseScopeBlock(scoped.scope, conceptName),
+    });
 
     const response = await generateInteractive({
       contents: prompt,

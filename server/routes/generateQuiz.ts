@@ -7,6 +7,7 @@ import { buildQuizPrompt } from '../prompts/generateQuiz';
 import { quizSchema } from '../schemas/generateQuiz';
 import { quizFallback } from '../fallbacks/generateQuiz';
 import { isStemTopic } from '../stem';
+import { buildCourseScopeBlock, resolveCourseScope, scopeSubjectText } from '../courseScope';
 
 export const handleGenerateQuiz = async (req: Request, res: Response) => {
   try {
@@ -17,9 +18,21 @@ export const handleGenerateQuiz = async (req: Request, res: Response) => {
     const keyPrinciples = Array.isArray(concept?.keyPrinciples) ? concept.keyPrinciples : [];
     const principlesText = keyPrinciples.join(' - ');
 
-    const isStem = isStemTopic(conceptName, conceptSummary, keyPrinciples, materialContext);
+    const scoped = await resolveCourseScope(req);
+    if ('error' in scoped) return res.status(400).json({ error: scoped.error });
 
-    const prompt = buildQuizPrompt({ conceptName, conceptSummary, principlesText, materialContext, studentExplanation, transferAnswer, isStem });
+    const isStem = isStemTopic(scopeSubjectText(scoped.scope), conceptName, conceptSummary, keyPrinciples, materialContext);
+
+    const prompt = buildQuizPrompt({
+      conceptName,
+      conceptSummary,
+      principlesText,
+      materialContext,
+      studentExplanation,
+      transferAnswer,
+      isStem,
+      courseScopeBlock: buildCourseScopeBlock(scoped.scope, conceptName),
+    });
 
     const response = await generateInteractive({
       contents: prompt,

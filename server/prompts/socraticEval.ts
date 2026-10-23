@@ -1,12 +1,14 @@
 import { MATH_ENGINE_DIRECTIVES } from '../stem';
 
-/** Grades the Socratic answer and produces the follow-up transfer challenge. */
-export function buildSocraticEvalPrompt({ concept, initialExplanation, socraticQuestion, socraticAnswer, isStem }: {
+/** Grades the Socratic answer, splits it into correct points vs. conceptual gaps, and produces the transfer challenge. */
+export function buildSocraticEvalPrompt({ concept, initialExplanation, socraticQuestion, socraticAnswer, isStem, courseScopeBlock }: {
   concept: any;
   initialExplanation?: string;
   socraticQuestion?: string;
   socraticAnswer?: string;
   isStem?: boolean;
+  /** Course isolation rules from buildCourseScopeBlock. */
+  courseScopeBlock: string;
 }): string {
   const transferRules = isStem
     ? `${MATH_ENGINE_DIRECTIVES}
@@ -23,16 +25,21 @@ export function buildSocraticEvalPrompt({ concept, initialExplanation, socraticQ
     : `تحدي التحويل transferChallenge يجب أن يكون سيناريو تطبيقياً محسوساً من المادة (لا تعريفاً نظرياً)، وأي صيغة كمية تُعرض في كتلة معزولة $$ ... $$ محاطة بسطر فارغ قبلها وبعدها.`;
 
   const prompt = `أنت "كواكلي" (Quakly)، المعلم الذكي والمدرب التفاعلي.
-المفهوم: "${concept?.name || 'مفهوم رياضي'}"
+
+${courseScopeBlock}
+
+المفهوم: "${concept?.name || 'المفهوم المدروس'}"
 السؤال المطروح: "${socraticQuestion}"
 إجابة وشرح الطالب الصوتي/المكتوب: "${socraticAnswer}"
 سياق الشرح الأولي: "${initialExplanation}"
 
 قواعد التقييم الصارمة (PEDAGOGICAL CONSTRAINTS):
-1. هل حدد الطالب الخطأ الحسابي/المنطقي بدقة؟
-2. هل تعليله الصوتي سليم رياضياً؟
-3. الرد duckReaction: قصير، مشجع، بلهجة عربية عصرية وذكية، بدون مقدمات إنشائية مطولة.
-4. ${transferRules}`;
+1. هل حدد الطالب الخطأ أو الخطوة المطلوبة بدقة؟
+2. هل تعليله سليم علمياً ومنطقياً في مادة هذا المقرر؟
+3. correctPoints = "أين أصبت": النقاط المفاهيمية التي عبّر عنها الطالب في إجابته بشكل صحيح (جمل قصيرة، حتى 4).
+4. conceptualGaps = "أين أخطأت / الفجوات المفاهيمية": المنطق الخاطئ أو الناقص في إجابته مع تصحيح مختصر (حتى 4). لا تختلق نقاطاً لم يقلها الطالب.
+5. الرد duckReaction: قصير، مشجع، بلهجة عربية عصرية وذكية، بدون مقدمات إنشائية مطولة.
+6. ${transferRules}`;
 
   return prompt;
 }

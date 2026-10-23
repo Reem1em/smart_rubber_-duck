@@ -4,6 +4,7 @@ import { generateFinalDiagnosis } from '../services/ai';
 import { useMicrophone } from '../hooks/useMicrophone';
 import { DuckCharacter } from './DuckCharacter';
 import { MathView } from './MathView';
+import { ExplanationFeedback } from './ExplanationFeedback';
 import {
   Sparkles,
   Send,
@@ -20,6 +21,7 @@ export const TransferChallengePanel: React.FC = () => {
     selectedConcept,
     diagnosis,
     socraticAnswer,
+    socraticEvaluation,
     transferChallenge,
     transferAnswer,
     setTransferAnswer,
@@ -64,6 +66,22 @@ export const TransferChallengePanel: React.FC = () => {
           message={`خطوة مُبهرة! لنختبر الآن قدرتك العملية على استخدام مفهوم "${selectedConcept.name}" في سيناريو تطبيقي حقيقي.`}
         />
       </div>
+
+      {/* Feedback on the Socratic answer the student just explained */}
+      {socraticEvaluation && (socraticEvaluation.correctPoints.length > 0 || socraticEvaluation.conceptualGaps.length > 0) && (
+        <div className="bg-white p-5 rounded-2xl border border-amber-200/80 shadow-sm space-y-2">
+          <h3 className="font-extrabold text-slate-900 text-base">تحليل إجابتك على سؤال كواكلي</h3>
+          {socraticEvaluation.duckReaction && (
+            <div className="text-xs sm:text-sm text-slate-700 font-bold leading-relaxed">
+              <MathView content={socraticEvaluation.duckReaction} />
+            </div>
+          )}
+          <ExplanationFeedback
+            correctPoints={socraticEvaluation.correctPoints}
+            gaps={socraticEvaluation.conceptualGaps}
+          />
+        </div>
+      )}
 
       {/* Transfer Challenge Scenario Card */}
       <div className="bg-white p-6 rounded-2xl border border-indigo-200 shadow-sm space-y-4">

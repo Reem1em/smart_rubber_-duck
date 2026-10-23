@@ -7,14 +7,31 @@ import { buildSocraticEvalPrompt } from '../prompts/socraticEval';
 import { socraticEvalSchema } from '../schemas/socraticEval';
 import { socraticEvalFallback } from '../fallbacks/socraticEval';
 import { isStemTopic } from '../stem';
+import { buildCourseScopeBlock, resolveCourseScope, scopeSubjectText } from '../courseScope';
 
 export const handleSocraticEval = async (req: Request, res: Response) => {
   try {
     const { concept, initialExplanation, socraticQuestion, socraticAnswer } = req.body;
 
-    const isStem = isStemTopic(concept?.name, concept?.summary, concept?.keyPrinciples, socraticQuestion);
+    const scoped = await resolveCourseScope(req);
+    if ('error' in scoped) return res.status(400).json({ error: scoped.error });
 
-    const prompt = buildSocraticEvalPrompt({ concept, initialExplanation, socraticQuestion, socraticAnswer, isStem });
+    const isStem = isStemTopic(
+      scopeSubjectText(scoped.scope),
+      concept?.name,
+      concept?.summary,
+      concept?.keyPrinciples,
+      socraticQuestion
+    );
+
+    const prompt = buildSocraticEvalPrompt({
+      concept,
+      initialExplanation,
+      socraticQuestion,
+      socraticAnswer,
+      isStem,
+      courseScopeBlock: buildCourseScopeBlock(scoped.scope, concept?.name || 'المفهوم المدروس'),
+    });
 
     const response = await generateInteractive({
       contents: prompt,

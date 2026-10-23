@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useAppState } from '../context/AppStateContext';
 import { diagnoseExplanation } from '../services/ai';
+import { courseScopeOf } from '../services/courseScope';
 import { useMicrophone } from '../hooks/useMicrophone';
 import { isRateLimitError } from '../utils/rateLimit';
 import { DuckCharacter } from './DuckCharacter';
@@ -33,6 +34,7 @@ export const TeachDuckPanel: React.FC = () => {
     setError,
     error,
     material,
+    activeCourse,
     showRateLimitModal,
   } = useAppState();
 
@@ -82,7 +84,8 @@ export const TeachDuckPanel: React.FC = () => {
         selectedConcept,
         studentExplanation,
         confidenceLevel,
-        material?.rawText
+        material?.rawText,
+        courseScopeOf(activeCourse)
       );
 
       setDiagnosis(diagResult);

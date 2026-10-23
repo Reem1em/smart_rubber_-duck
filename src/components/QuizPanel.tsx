@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAppState } from '../context/AppStateContext';
 import { generateQuiz, generateFinalDiagnosis, discussQuizAnswer } from '../services/ai';
 import { quickQuizFeedback } from '../services/quizFeedback';
+import { courseScopeOf } from '../services/courseScope';
 import { isRateLimitError } from '../utils/rateLimit';
 import { DuckCharacter } from './DuckCharacter';
 import { MathView } from './MathView';
@@ -231,6 +232,7 @@ const EvaluationPanel: React.FC<{
 export const QuizPanel: React.FC = () => {
   const {
     material,
+    activeCourse,
     selectedConcept,
     studentExplanation,
     transferAnswer,
@@ -268,7 +270,8 @@ export const QuizPanel: React.FC = () => {
             selectedConcept,
             studentExplanation,
             transferAnswer,
-            material?.rawText
+            material?.rawText,
+            courseScopeOf(activeCourse)
           );
           setQuizQuestions(questions);
           setDuckState('encouraging');
@@ -352,6 +355,7 @@ export const QuizPanel: React.FC = () => {
         // Earlier turns only — the new message travels separately as `newMessage`.
         conversationHistory: priorHistory.map((m) => ({ role: m.role, text: m.text })),
         newMessage: message,
+        courseScope: courseScopeOf(activeCourse),
       });
 
       const tutorMsg: QuizDiscussionMessage = {
@@ -428,7 +432,8 @@ export const QuizPanel: React.FC = () => {
             transferChallenge,
             transferAnswer,
             score,
-            totalQuestions
+            totalQuestions,
+            courseScopeOf(activeCourse)
           );
           setFinalDiagnosis(finalResult);
           setDuckState(finalResult.duckMood || 'proud');

@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { useAppState } from '../context/AppStateContext';
 import { evaluateSocraticAnswer } from '../services/ai';
+import { courseScopeOf } from '../services/courseScope';
 import { useMicrophone } from '../hooks/useMicrophone';
 import { isRateLimitError } from '../utils/rateLimit';
 import { DuckCharacter } from './DuckCharacter';
 import { MathView } from './MathView';
+import { ExplanationFeedback } from './ExplanationFeedback';
 import {
   HelpCircle,
-  AlertTriangle,
   CheckCircle2,
   Send,
   Loader2,
@@ -34,6 +35,7 @@ export const SocraticQuestionPanel: React.FC = () => {
     setStep,
     setError,
     error,
+    activeCourse,
     showRateLimitModal,
   } = useAppState();
 
@@ -67,7 +69,8 @@ export const SocraticQuestionPanel: React.FC = () => {
         selectedConcept,
         studentExplanation,
         diagnosis.socraticQuestion,
-        socraticAnswer
+        socraticAnswer,
+        courseScopeOf(activeCourse)
       );
 
       setSocraticEvaluation(evaluation);
@@ -185,23 +188,11 @@ export const SocraticQuestionPanel: React.FC = () => {
           {diagnosis.gapDescription}
         </p>
 
-        {/* Identified Flaws / Misconceptions */}
-        {diagnosis.identifiedFlaws && diagnosis.identifiedFlaws.length > 0 && (
-          <div className="space-y-2 pt-2">
-            <p className="text-xs font-bold text-rose-800 uppercase tracking-wider flex items-center gap-1.5">
-              <AlertTriangle className="w-4 h-4 text-rose-600" />
-              <span>الثغرات والمفاهيم التي شابها الغموض في الشرح:</span>
-            </p>
-            <ul className="space-y-1 text-xs sm:text-sm text-slate-700">
-              {diagnosis.identifiedFlaws.map((flaw, idx) => (
-                <li key={idx} className="flex items-start gap-2 bg-rose-50/60 p-2.5 rounded-lg border border-rose-100 font-medium">
-                  <span className="text-rose-600 font-bold">•</span>
-                  <span>{flaw}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        {/* Where the explanation was right vs. its conceptual gaps */}
+        <ExplanationFeedback
+          correctPoints={diagnosis.strengths ?? []}
+          gaps={diagnosis.identifiedFlaws ?? []}
+        />
       </div>
 
       {/* Socratic Question Dialogue Box */}

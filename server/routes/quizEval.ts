@@ -7,6 +7,7 @@ import { buildQuizDiscussionPrompt } from '../prompts/quizEval';
 import { quizDiscussionSchema, validateQuizAnswerBody, sanitizeDiscussion } from '../schemas/quizEval';
 import { quizDiscussionFallback } from '../fallbacks/quizEval';
 import { isStemTopic } from '../stem';
+import { buildCourseScopeBlock, resolveCourseScope, scopeSubjectText } from '../courseScope';
 
 const INVALID_BODY = 'بيانات الطلب غير مكتملة.';
 
@@ -30,6 +31,8 @@ export const handleQuizDiscuss = async (req: Request, res: Response) => {
   if (!valid.ok || !discussion.ok) {
     return res.status(400).json({ error: INVALID_BODY });
   }
+  const scoped = await resolveCourseScope(req);
+  if ('error' in scoped) return res.status(400).json({ error: scoped.error });
 
   try {
     const { question, studentAnswerIndex } = valid;
@@ -37,7 +40,7 @@ export const handleQuizDiscuss = async (req: Request, res: Response) => {
     const conceptName = typeof concept?.name === 'string' && concept.name ? concept.name : 'المفهوم المدروس';
     const isCorrect = studentAnswerIndex === question.correctAnswerIndex;
 
-    const isStem = isStemTopic(conceptName, concept?.summary, question.question);
+    const isStem = isStemTopic(scopeSubjectText(scoped.scope), conceptName, concept?.summary, question.question);
 
     const prompt = buildQuizDiscussionPrompt({
       question: question.question,
@@ -50,6 +53,7 @@ export const handleQuizDiscuss = async (req: Request, res: Response) => {
       newMessage: discussion.newMessage,
       conceptName,
       isStem,
+      courseScopeBlock: buildCourseScopeBlock(scoped.scope, conceptName),
     });
 
     const response = await generateInteractive({

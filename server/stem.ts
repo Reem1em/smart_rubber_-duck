@@ -53,18 +53,59 @@ const STEM_KEYWORDS: readonly string[] = [
 ];
 
 /**
- * Activates the Math Engine pipeline when any supplied text (course name, concept
- * name/summary, key principles, extracted material) mentions a STEM topic.
+ * STEM tokens that are everyday vocabulary in programming courses too
+ * ("function", "دالة", "مصفوفة" = array, "limit", "محدد" = specified).
  */
-export function isStemTopic(...texts: Array<unknown>): boolean {
-  const haystack = texts
+const SHARED_WITH_PROGRAMMING: ReadonlySet<string> = new Set(['function', 'دالة', 'دوال', 'مصفوف', 'محدد', 'limit']);
+
+/** Arabic + English tokens that mark a programming / software course. */
+const PROGRAMMING_KEYWORDS: readonly string[] = [
+  'برمج',
+  'كود',
+  'شيفرة',
+  'خوارزم',
+  'بايثون',
+  'جافا',
+  'programming',
+  'python',
+  'javascript',
+  'typescript',
+  'java',
+  'c++',
+  'c#',
+  'code',
+  'algorithm',
+  'software',
+  'oop',
+];
+
+const toHaystack = (texts: Array<unknown>): string =>
+  texts
     .flatMap((t) => (Array.isArray(t) ? t : [t]))
     .filter((t): t is string => typeof t === 'string' && t.length > 0)
     .join(' ')
     .toLowerCase();
 
+/** True when any supplied text mentions a programming topic. */
+export function isProgrammingTopic(...texts: Array<unknown>): boolean {
+  const haystack = toHaystack(texts);
+  return !!haystack && PROGRAMMING_KEYWORDS.some((kw) => haystack.includes(kw));
+}
+
+/**
+ * Activates the Math Engine pipeline when any supplied text (course name, concept
+ * name/summary, key principles, extracted material) mentions a STEM topic.
+ * In a programming context, words shared with programming ("function", "مصفوفة") do not count,
+ * so a Python course is never turned into a matrices exercise.
+ */
+export function isStemTopic(...texts: Array<unknown>): boolean {
+  const haystack = toHaystack(texts);
   if (!haystack) return false;
-  return STEM_KEYWORDS.some((kw) => haystack.includes(kw));
+
+  const matches = STEM_KEYWORDS.filter((kw) => haystack.includes(kw));
+  if (matches.length === 0) return false;
+  if (!PROGRAMMING_KEYWORDS.some((kw) => haystack.includes(kw))) return true;
+  return matches.some((kw) => !SHARED_WITH_PROGRAMMING.has(kw));
 }
 
 /**

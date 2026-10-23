@@ -9,6 +9,8 @@ export function socraticEvalFallback(body: any) {
     reasoningQualityScore: null,
     improvedUnderstanding: false,
     duckReaction: 'كواك! السيرفرات زحمة فما قدرت أقيّم إجابتك بدقة — بس لا تشيل هم، إجابتك محفوظة. خلنا نكمل بتحدي تطبيقي.',
+    correctPoints: [],
+    conceptualGaps: [],
     transferChallenge: {
       scenario: `طبّق (${name}) على موقف جديد من حياتك اليومية أو من تمرين في ملزمتك، يختلف عن المثال اللي شرحته.`,
       task: 'بدون ما تحل للنهاية، اشرح لي بصوتك: وش أول خطوة راح تسويها وليه؟',

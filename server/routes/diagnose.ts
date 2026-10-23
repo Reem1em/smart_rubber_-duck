@@ -7,6 +7,7 @@ import { buildDiagnosePrompt } from '../prompts/diagnose';
 import { diagnoseSchema } from '../schemas/diagnose';
 import { diagnoseFallback } from '../fallbacks/diagnose';
 import { isStemTopic } from '../stem';
+import { buildCourseScopeBlock, resolveCourseScope, scopeSubjectText } from '../courseScope';
 
 export const handleDiagnose = async (req: Request, res: Response) => {
   try {
@@ -16,9 +17,25 @@ export const handleDiagnose = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'يرجى تقديم المفهوم وشرح الطالب.' });
     }
 
-    const isStem = isStemTopic(concept?.name, concept?.summary, concept?.keyPrinciples, materialContext);
+    const scoped = await resolveCourseScope(req);
+    if ('error' in scoped) return res.status(400).json({ error: scoped.error });
 
-    const prompt = buildDiagnosePrompt({ concept, studentExplanation, confidenceLevel, materialContext, isStem });
+    const isStem = isStemTopic(
+      scopeSubjectText(scoped.scope),
+      concept?.name,
+      concept?.summary,
+      concept?.keyPrinciples,
+      materialContext
+    );
+
+    const prompt = buildDiagnosePrompt({
+      concept,
+      studentExplanation,
+      confidenceLevel,
+      materialContext,
+      isStem,
+      courseScopeBlock: buildCourseScopeBlock(scoped.scope, concept?.name || 'المفهوم المدروس'),
+    });
 
     const response = await generateInteractive({
       contents: prompt,

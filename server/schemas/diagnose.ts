@@ -10,10 +10,12 @@ export const diagnoseSchema = {
     gapDescription: { type: Type.STRING },
     identifiedFlaws: {
       type: Type.ARRAY,
+      description: 'أين أخطأت / الفجوات المفاهيمية: منطق خاطئ أو ناقص في شرح الطالب',
       items: { type: Type.STRING },
     },
     strengths: {
       type: Type.ARRAY,
+      description: 'أين أصبت: نقاط مفاهيمية عبّر عنها الطالب بشكل صحيح',
       items: { type: Type.STRING },
     },
     socraticQuestion: { type: Type.STRING },

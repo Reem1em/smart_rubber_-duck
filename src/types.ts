@@ -166,6 +166,20 @@ export interface SocraticEvaluation {
   reasoningQualityScore: number | null; // 0 - 100, null = unrated
   improvedUnderstanding: boolean;
   duckReaction: string;
+  /** "أين أصبت": points the student articulated correctly. */
+  correctPoints: string[];
+  /** "أين أخطأت / الفجوات المفاهيمية": missing or flawed logic. */
+  conceptualGaps: string[];
+}
+
+/**
+ * Sent with every concept-session AI call so the server confines the model to one course
+ * and never mixes subjects (e.g. matrices inside a programming course).
+ */
+export interface CourseScope {
+  courseId: string;
+  courseTitle: string;
+  conceptNames: string[];
 }
 
 export interface TransferChallenge {

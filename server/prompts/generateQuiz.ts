@@ -1,7 +1,7 @@
 import { LATEX_DISPLAY_RULES, BAN_THEORY_RULE } from '../stem';
 
 /** Builds the graded 5-7 question quiz prompt for a single concept. */
-export function buildQuizPrompt({ conceptName, conceptSummary, principlesText, materialContext, studentExplanation, transferAnswer, isStem }: {
+export function buildQuizPrompt({ conceptName, conceptSummary, principlesText, materialContext, studentExplanation, transferAnswer, isStem, courseScopeBlock }: {
   conceptName: string;
   conceptSummary: string;
   principlesText: string;
@@ -9,8 +9,13 @@ export function buildQuizPrompt({ conceptName, conceptSummary, principlesText, m
   studentExplanation?: string;
   transferAnswer?: string;
   isStem?: boolean;
+  /** Course isolation rules from buildCourseScopeBlock. */
+  courseScopeBlock: string;
 }): string {
-  const prompt = `أنت أستاذ أكاديمي خبير ومصمم اختبارات تقييمية تخصصية في منصة كواكلي للرياضيات.
+  const prompt = `أنت أستاذ أكاديمي خبير ومصمم اختبارات تقييمية تخصصية في منصة كواكلي.
+
+${courseScopeBlock}
+
 المادة التعليمية والمفهوم المستهدف:
 - اسم المفهوم العلمي/الدراسي: "${conceptName}"
 - ملخص المفهوم من المادة: "${conceptSummary}"
@@ -31,7 +36,7 @@ ${BAN_THEORY_RULE}
 - يُحظر في حقل options كتابة أي مصفوفة بصيغة نصية مسطحة. كل مصفوفة تظهر كخيار تُكتب داخل $$\\begin{bmatrix}...\\end{bmatrix}$$.
 - الأعداد السالبة والكسور في الخيارات تُكتب داخل $ ... $ لضمان عزل RTL/LTR: مثل $-4$ ، $\\frac{1}{2}$ ، $\\sqrt{5}$.
 ` : `أي صيغة أو رمز كمي يُعرض في كتلة معزولة $$ ... $$ محاطة بسطر فارغ قبلها وبعدها لتفادي تضارب RTL/LTR.
-- يُحظر عرض أي مصفوفة بشكل نصي مسطح. كل مصفوفة في سطر مستقل: $$\\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}$$
+- إن كانت المصفوفات جزءاً من هذا المقرر: لا تُعرض بشكل نصي مسطح، بل كل مصفوفة في سطر مستقل: $$\\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}$$
 - الأعداد السالبة والكسور تُكتب داخل $ ... $: مثل $-3$ ، $\\frac{a}{b}$.
 `}
 الهدف والمطلوب بدقة:

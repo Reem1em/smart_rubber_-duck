@@ -6,6 +6,16 @@ export const socraticEvalSchema = {
     reasoningQualityScore: { type: Type.NUMBER },
     improvedUnderstanding: { type: Type.BOOLEAN },
     duckReaction: { type: Type.STRING },
+    correctPoints: {
+      type: Type.ARRAY,
+      description: 'أين أصبت: نقاط مفاهيمية عبّر عنها الطالب بشكل صحيح',
+      items: { type: Type.STRING },
+    },
+    conceptualGaps: {
+      type: Type.ARRAY,
+      description: 'أين أخطأت / الفجوات المفاهيمية: منطق خاطئ أو ناقص في إجابة الطالب',
+      items: { type: Type.STRING },
+    },
     transferChallenge: {
       type: Type.OBJECT,
       properties: {
@@ -19,5 +29,12 @@ export const socraticEvalSchema = {
       required: ['scenario', 'task', 'hints'],
     },
   },
-  required: ['reasoningQualityScore', 'improvedUnderstanding', 'duckReaction', 'transferChallenge'],
+  required: [
+    'reasoningQualityScore',
+    'improvedUnderstanding',
+    'duckReaction',
+    'correctPoints',
+    'conceptualGaps',
+    'transferChallenge',
+  ],
 };
