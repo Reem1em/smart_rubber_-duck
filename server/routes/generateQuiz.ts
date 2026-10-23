@@ -31,6 +31,15 @@ export const handleGenerateQuiz = async (req: Request, res: Response) => {
 
     const parsed = parseModelJson(response.text);
     if (parsed.questions && Array.isArray(parsed.questions)) {
+      // Option notes power the instant answer feedback; keep them only when they line up 1:1 with the options.
+      for (const q of parsed.questions) {
+        const ok =
+          Array.isArray(q?.optionNotes) &&
+          Array.isArray(q?.options) &&
+          q.optionNotes.length === q.options.length &&
+          q.optionNotes.every((n: unknown) => typeof n === 'string' && n.trim());
+        if (!ok) delete q.optionNotes;
+      }
       return res.json(parsed);
     }
     throw new Error('Invalid quiz response');

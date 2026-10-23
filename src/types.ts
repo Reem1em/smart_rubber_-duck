@@ -195,6 +195,8 @@ export interface QuizQuestion {
   correctAnswerIndex: number;
   explanation: string;
   difficulty: string; // 'بسيط' | 'متوسط' | 'متقدم'
+  /** One short sentence per option: why that option is correct or incorrect (same order as `options`). */
+  optionNotes?: string[];
 }
 
 export interface QuizResult {
@@ -204,20 +206,12 @@ export interface QuizResult {
 }
 
 /**
- * Detailed answer evaluation returned by /api/quiz/evaluate-answer.
- * Maps directly to the Gemini structured output schema.
+ * Instant multiple-choice feedback, computed on the client with no model call:
+ * the verdict follows `correctAnswerIndex`; the explanation is 1–2 sentences.
  */
 export interface QuizAnswerEvaluation {
-  status: 'correct' | 'partially_correct' | 'incorrect' | 'needs_clarification';
-  overall_assessment: string;
-  correct_points: string[];
-  incorrect_points: string[];
-  missing_points: string[];
+  status: 'correct' | 'incorrect';
   explanation: string;
-  suggested_correction: string;
-  needs_clarification: boolean;
-  /** True when the evaluation was served from the offline fallback. */
-  degraded?: boolean;
 }
 
 /** One turn in the per-question discussion thread. */
@@ -231,14 +225,12 @@ export interface QuizDiscussionMessage {
 /**
  * Lifecycle state for a single quiz question.
  * - ready_for_answer   : question shown, waiting for selection
- * - evaluating         : request in flight to /api/quiz/evaluate-answer
- * - feedback_available : evaluation returned; student reads feedback
+ * - feedback_available : instant verdict shown; student reads feedback
  * - discussion_active  : student is typing a follow-up
  * - ready_for_next     : student explicitly ready to advance
  */
 export type QuizQuestionState =
   | 'ready_for_answer'
-  | 'evaluating'
   | 'feedback_available'
   | 'discussion_active'
   | 'ready_for_next';

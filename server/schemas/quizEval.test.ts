@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeQuizEvaluation, sanitizeDiscussion, validateQuizAnswerBody } from './quizEval';
+import { sanitizeDiscussion, validateQuizAnswerBody } from './quizEval';
 
 const question = {
   question: 'ما وظيفة نقطة الوصول؟',
@@ -8,34 +8,6 @@ const question = {
   correctAnswerIndex: 1,
   explanation: 'نقطة الوصول تربط العملاء اللاسلكيين بالشبكة السلكية.',
 };
-
-describe('normalizeQuizEvaluation — the answer key decides the verdict', () => {
-  it('forces "correct" for a correct index even if the model said partially_correct', () => {
-    const out = normalizeQuizEvaluation({ status: 'partially_correct', overall_assessment: 'x' }, true);
-    expect(out.status).toBe('correct');
-  });
-
-  it('forces "incorrect" for a wrong index even if the model said correct', () => {
-    const out = normalizeQuizEvaluation({ status: 'correct', overall_assessment: 'x' }, false);
-    expect(out.status).toBe('incorrect');
-  });
-
-  it('keeps needs_clarification from the model', () => {
-    expect(normalizeQuizEvaluation({ status: 'needs_clarification' }, true).status).toBe('needs_clarification');
-    expect(normalizeQuizEvaluation({ status: 'correct', needs_clarification: true }, false).status).toBe(
-      'needs_clarification'
-    );
-  });
-
-  it('coerces missing or malformed fields', () => {
-    const out = normalizeQuizEvaluation({ correct_points: 'nope', incorrect_points: [1, 'a', ''] }, false);
-    expect(out.correct_points).toEqual([]);
-    expect(out.incorrect_points).toEqual(['a']);
-    expect(out.missing_points).toEqual([]);
-    expect(out.explanation).toBe('');
-    expect(out.needs_clarification).toBe(false);
-  });
-});
 
 describe('validateQuizAnswerBody', () => {
   it('accepts a well-formed body', () => {

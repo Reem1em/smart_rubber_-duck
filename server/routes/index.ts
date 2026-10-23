@@ -13,7 +13,7 @@ import { handleGenerateCodeLab } from './codeLab';
 import { handleGenerateBugChallenge, handleEvaluateBugChallenge } from './bugHunting';
 import { handleReviewProject } from './reviewProject';
 import { handleGenerateDevChallenge, handleEvaluateDevSubmission, handleEvaluateCustomLab } from './devLab';
-import { handleEvaluateQuizAnswer, handleQuizDiscuss } from './quizEval';
+import { handleQuizDiscuss } from './quizEval';
 import { handleExtractSlides } from './extractSlides';
 import { handleAuthConfig, handleAuthMe, handleDevAuth, handleGoogleAuth, handleLogout } from './auth';
 import { handleListCourses, handlePutCourse, handleDeleteCourse } from './courses';
@@ -62,10 +62,8 @@ export function registerRoutes(app: Express): void {
   // 4. Generate Interactive Quiz Module (5-7 Questions Gradated)
   app.post('/api/generate-quiz', safe(quotaGuard), safe(handleGenerateQuiz));
 
-  // 4a. Evaluate a student's quiz answer in detail
-  app.post('/api/quiz/evaluate-answer', safe(quotaGuard), safe(handleEvaluateQuizAnswer));
-
-  // 4b. Follow-up discussion about an evaluated quiz answer
+  // 4a. Optional follow-up discussion about an answered quiz question
+  //     (the verdict itself is instant and computed on the client — no model call)
   app.post('/api/quiz/discuss', safe(quotaGuard), safe(handleQuizDiscuss));
 
   // 5. Final Diagnostic Evaluation & Mastery Report

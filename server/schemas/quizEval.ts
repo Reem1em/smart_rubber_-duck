@@ -1,64 +1,6 @@
 import { Type } from '@google/genai';
 
 /**
- * Structured output schema for a detailed quiz answer evaluation.
- * Maps to QuizAnswerEvaluation in src/types.ts
- */
-export const quizEvalSchema = {
-  type: Type.OBJECT,
-  properties: {
-    status: {
-      type: Type.STRING,
-      enum: ['correct', 'partially_correct', 'incorrect', 'needs_clarification'],
-      description:
-        'الحكم العام: correct | partially_correct | incorrect | needs_clarification',
-    },
-    overall_assessment: {
-      type: Type.STRING,
-      description: 'ملخص عربي موجز للحكم (جملة أو جملتان)',
-    },
-    correct_points: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: 'ما أصاب فيه الطالب، يمكن أن يكون فارغاً',
-    },
-    incorrect_points: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: 'الأخطاء المفاهيمية أو الحسابية التي ارتكبها الطالب',
-    },
-    missing_points: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: 'معلومات أو منطق ناقص كان ينبغي توافره',
-    },
-    explanation: {
-      type: Type.STRING,
-      description: 'شرح أكاديمي دقيق للمفهوم المختبر في هذا السؤال',
-    },
-    suggested_correction: {
-      type: Type.STRING,
-      description: 'التصحيح أو الخطوة التالية المقترحة للطالب',
-    },
-    needs_clarification: {
-      type: Type.BOOLEAN,
-      description:
-        'true فقط إذا كان السؤال أو الخيارات غامضة تمنع التقييم العادل',
-    },
-  },
-  required: [
-    'status',
-    'overall_assessment',
-    'correct_points',
-    'incorrect_points',
-    'missing_points',
-    'explanation',
-    'suggested_correction',
-    'needs_clarification',
-  ],
-};
-
-/**
  * Schema for a discussion follow-up reply (plain text with LaTeX).
  * The discussion explains; it never re-grades — the grade is fixed by correctAnswerIndex.
  */
@@ -76,29 +18,7 @@ export const quizDiscussionSchema = {
 export const MAX_DISCUSSION_TEXT = 1000;
 const MAX_HISTORY_TURNS = 12;
 
-const toStringArray = (value: unknown): string[] =>
-  Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0) : [];
-
 const toText = (value: unknown): string => (typeof value === 'string' ? value : '');
-
-/**
- * Coerces a model evaluation into the client shape. The verdict is taken from the
- * answer key, never from the model: a multiple-choice grade is deterministic. The only
- * model verdict kept is `needs_clarification`, which flags an ambiguous question.
- */
-export function normalizeQuizEvaluation(parsed: any, isCorrect: boolean) {
-  const needsClarification = parsed?.status === 'needs_clarification' || parsed?.needs_clarification === true;
-  return {
-    status: needsClarification ? 'needs_clarification' : isCorrect ? 'correct' : 'incorrect',
-    overall_assessment: toText(parsed?.overall_assessment),
-    correct_points: toStringArray(parsed?.correct_points),
-    incorrect_points: toStringArray(parsed?.incorrect_points),
-    missing_points: toStringArray(parsed?.missing_points),
-    explanation: toText(parsed?.explanation),
-    suggested_correction: toText(parsed?.suggested_correction),
-    needs_clarification: needsClarification,
-  };
-}
 
 export interface ValidQuizQuestion {
   question: string;
