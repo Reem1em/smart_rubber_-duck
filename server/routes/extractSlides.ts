@@ -2,9 +2,12 @@ import type { Request, Response } from 'express';
 import { ThinkingLevel } from '@google/genai';
 
 import { generateWithRetry, isQuotaOrRateLimitError } from '../gemini';
-import { EXTRACT_SLIDES_SYSTEM_INSTRUCTION, buildExtractSlidesPrompt } from '../prompts/extractSlides';
+import { buildSystemPrompt } from '../utils/loadAgent';
+import { buildExtractSlidesPrompt } from '../prompts/extractSlides';
 import { mergeSlides, parseTranscript } from '../slides/parseTranscript';
 import { buildSlideChunks, sectionPlainText, type ParsedSlide } from '../../src/services/slides/chunking';
+
+const SYSTEM_PROMPT = buildSystemPrompt('01_ANALYZER.md');
 
 /** Continuation calls per file when a transcript hits the model's output limit. */
 const MAX_CALLS = 4;
@@ -153,7 +156,7 @@ export const handleExtractSlides = async (req: Request, res: Response) => {
             ],
           },
           config: {
-            systemInstruction: EXTRACT_SLIDES_SYSTEM_INSTRUCTION,
+            systemInstruction: SYSTEM_PROMPT,
             thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
             maxOutputTokens: MAX_OUTPUT_TOKENS,
             temperature: 0,

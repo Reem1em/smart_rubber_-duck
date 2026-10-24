@@ -4,13 +4,15 @@ import { ThinkingLevel } from '@google/genai';
 import { generateWithRetry } from '../gemini';
 import { handleModelFailure } from '../routeErrors';
 import { parseModelJsonWithFences } from '../modelJson';
+import { buildSystemPrompt } from '../utils/loadAgent';
 import {
-  COURSE_ROADMAP_SYSTEM_INSTRUCTION,
   buildSyllabusDocumentPrompt,
   buildSyllabusTextPrompt,
 } from '../prompts/courseRoadmap';
 import { courseRoadmapSchema } from '../schemas/courseRoadmap';
 import { courseRoadmapFallback } from '../fallbacks/courseRoadmap';
+
+const SYSTEM_PROMPT = buildSystemPrompt('06_ROADMAP.md');
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -56,7 +58,7 @@ export const handleParseSyllabus = async (req: Request, res: Response) => {
       {
         contents: { parts },
         config: {
-          systemInstruction: COURSE_ROADMAP_SYSTEM_INSTRUCTION,
+          systemInstruction: SYSTEM_PROMPT,
           thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           responseMimeType: 'application/json',
           responseSchema: courseRoadmapSchema,

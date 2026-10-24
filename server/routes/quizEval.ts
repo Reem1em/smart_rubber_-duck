@@ -3,10 +3,13 @@ import type { Request, Response } from 'express';
 import { generateInteractive } from '../gemini';
 import { handleAssessmentFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
+import { buildSystemPrompt } from '../utils/loadAgent';
 import { buildQuizDiscussionPrompt } from '../prompts/quizEval';
 import { quizDiscussionSchema, validateQuizAnswerBody, sanitizeDiscussion } from '../schemas/quizEval';
 import { isStemTopic } from '../stem';
 import { buildCourseScopeBlock, resolveCourseScope, scopeSubjectText } from '../courseScope';
+
+const SYSTEM_PROMPT = buildSystemPrompt('05_EVALUATOR.md');
 
 const INVALID_BODY = 'بيانات الطلب غير مكتملة.';
 
@@ -58,6 +61,7 @@ export const handleQuizDiscuss = async (req: Request, res: Response) => {
     const response = await generateInteractive({
       contents: prompt,
       config: {
+        systemInstruction: SYSTEM_PROMPT,
         responseMimeType: 'application/json',
         responseSchema: quizDiscussionSchema,
         // Fully deterministic: the discussion must never drift from the answer key.

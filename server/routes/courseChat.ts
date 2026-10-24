@@ -2,8 +2,8 @@ import type { Request, Response } from 'express';
 
 import { generateInteractive } from '../gemini';
 import { handleModelFailure } from '../routeErrors';
+import { buildSystemPrompt } from '../utils/loadAgent';
 import {
-  COURSE_CHAT_SYSTEM_INSTRUCTION,
   buildCourseChatPrompt,
   enforceCitations,
   sanitizeGrounding,
@@ -13,6 +13,8 @@ import { courseChatFallback } from '../fallbacks/courseChat';
 import { bearerToken, verifySession } from '../auth/session';
 import { getUserCourse } from '../auth/courseStore';
 import { ZERO_HALLUCINATION_MANDATE, resolveCourseScope } from '../courseScope';
+
+const SYSTEM_PROMPT = buildSystemPrompt('04_TUTOR.md');
 
 const normalizeHistory = (raw: unknown): CourseChatTurn[] =>
   Array.isArray(raw)
@@ -96,7 +98,7 @@ export const handleCourseChat = async (req: Request, res: Response) => {
     const response = await generateInteractive({
       contents: prompt,
       config: {
-        systemInstruction: `${COURSE_CHAT_SYSTEM_INSTRUCTION}\n\n${ZERO_HALLUCINATION_MANDATE}`,
+        systemInstruction: `${SYSTEM_PROMPT}\n\n${ZERO_HALLUCINATION_MANDATE}`,
         temperature: 0.4,
         maxOutputTokens: 1000,
       },

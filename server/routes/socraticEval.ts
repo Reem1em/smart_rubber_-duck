@@ -3,10 +3,13 @@ import type { Request, Response } from 'express';
 import { generateInteractive } from '../gemini';
 import { handleAssessmentFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
+import { buildSystemPrompt } from '../utils/loadAgent';
 import { buildSocraticEvalPrompt } from '../prompts/socraticEval';
 import { socraticEvalSchema } from '../schemas/socraticEval';
 import { isStemTopic } from '../stem';
 import { buildCourseScopeBlock, resolveCourseScope, scopeSubjectText } from '../courseScope';
+
+const SYSTEM_PROMPT = buildSystemPrompt('04_TUTOR.md', '05_EVALUATOR.md');
 
 export const handleSocraticEval = async (req: Request, res: Response) => {
   try {
@@ -35,6 +38,7 @@ export const handleSocraticEval = async (req: Request, res: Response) => {
     const response = await generateInteractive({
       contents: prompt,
       config: {
+        systemInstruction: SYSTEM_PROMPT,
         responseMimeType: 'application/json',
         responseSchema: socraticEvalSchema,
       },

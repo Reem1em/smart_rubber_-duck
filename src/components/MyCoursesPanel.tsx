@@ -181,113 +181,111 @@ export const MyCoursesPanel: React.FC = () => {
             const isActive = course.id === activeCourseId;
             return (
               <React.Fragment key={course.id}>
-              <motion.div
-                whileHover={{ scale: 1.01, y: -2 }}
-                onClick={() => openCourse(course)}
-                className={`w-full min-w-0 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border shadow-xs hover:shadow-md transition-all cursor-pointer space-y-3 group ${
-                  isActive
-                    ? 'border-amber-400 ring-2 ring-amber-200 dark:ring-amber-900/60'
-                    : 'border-amber-200/80 dark:border-slate-800 hover:border-amber-400'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="p-2 bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-400 rounded-xl shrink-0">
-                      <BookOpen className="w-4 h-4" />
-                    </div>
-                    <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-sm truncate group-hover:text-amber-700 dark:group-hover:text-amber-400">
-                      <MathView content={course.title} asInline />
-                    </h3>
-                  </div>
-                  <button
-                    onClick={(e) => handleDelete(e, course)}
-                    title="حذف المادة"
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer shrink-0"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                {/* File count pill */}
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
-                  <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                    {course.concepts.length} مفهوماً
-                  </span>
-                  {(course.files ?? []).length > 0 && (
-                    <span className="px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                      {(course.files ?? []).length} شابتر
-                    </span>
-                  )}
-                  <span
-                    className={`px-2 py-0.5 rounded-full border ${
-                      progress >= 100
-                        ? 'bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
-                        : progress > 0
-                        ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800'
-                        : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                <motion.div
+                  whileHover={{ scale: 1.01, y: -2 }}
+                  onClick={() => openCourse(course)}
+                  className={`w-full min-w-0 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border shadow-xs hover:shadow-md transition-all cursor-pointer space-y-3 group ${isActive
+                      ? 'border-amber-400 ring-2 ring-amber-200 dark:ring-amber-900/60'
+                      : 'border-amber-200/80 dark:border-slate-800 hover:border-amber-400'
                     }`}
-                  >
-                    {progress >= 100 ? 'مكتملة ✅' : `التقدم ${progress}%`}
-                  </span>
-                  {isActive && (
-                    <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white border border-amber-600">
-                      المادة النشطة
-                    </span>
-                  )}
-                </div>
-
-                {/* Progress bar */}
-                <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-amber-500 rounded-full transition-all"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-
-                {/* Action footer */}
-                <div className="flex items-center justify-between pt-1">
-                  <div className="flex items-center text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
-                    <span className="truncate">
-                      {course.fileName} • {formatBytes(course.fileSize)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); toggleFiles(course.id); }}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-lg hover:bg-amber-100 transition-colors cursor-pointer"
-                    >
-                      <FolderOpen className="w-3 h-3" />
-                      <span>ملفات الشباتر</span>
-                      {expandedCourseId === course.id
-                        ? <ChevronUp className="w-3 h-3" />
-                        : <ChevronDown className="w-3 h-3" />}
-                    </button>
-                    <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-bold">
-                      <Zap className="w-3 h-3" />
-                      <span>فتح فوري</span>
-                    </span>
-                  </div>
-                </div>
-              </motion.div>
-
-              {/* Inline chapter files panel (expands below the card) */}
-              <AnimatePresence initial={false}>
-                {expandedCourseId === course.id && (
-                  <motion.div
-                    key={`files-${course.id}`}
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.25 }}
-                    className="col-span-full overflow-hidden"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="bg-slate-50 dark:bg-slate-900/60 border border-t-0 border-amber-200/60 dark:border-slate-800 rounded-b-2xl px-4 py-4">
-                      <CourseFilesPanel course={course} />
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="p-2 bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-400 rounded-xl shrink-0">
+                        <BookOpen className="w-4 h-4" />
+                      </div>
+                      <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-sm truncate group-hover:text-amber-700 dark:group-hover:text-amber-400">
+                        <MathView content={course.title} asInline />
+                      </h3>
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                    <button
+                      onClick={(e) => handleDelete(e, course)}
+                      title="حذف المادة"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* File count pill */}
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                      {course.concepts.length} مفهوماً
+                    </span>
+                    {(course.files ?? []).length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                        {(course.files ?? []).length} شابتر
+                      </span>
+                    )}
+                    <span
+                      className={`px-2 py-0.5 rounded-full border ${progress >= 100
+                          ? 'bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
+                          : progress > 0
+                            ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800'
+                            : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                        }`}
+                    >
+                      {progress >= 100 ? 'مكتملة ✅' : `التقدم ${progress}%`}
+                    </span>
+                    {isActive && (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white border border-amber-600">
+                        المادة النشطة
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-amber-500 rounded-full transition-all"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+
+                  {/* Action footer */}
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                      <span className="truncate">
+                        {course.fileName} • {formatBytes(course.fileSize)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleFiles(course.id); }}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-lg hover:bg-amber-100 transition-colors cursor-pointer"
+                      >
+                        <FolderOpen className="w-3 h-3" />
+                        <span>ملفات الشباتر</span>
+                        {expandedCourseId === course.id
+                          ? <ChevronUp className="w-3 h-3" />
+                          : <ChevronDown className="w-3 h-3" />}
+                      </button>
+                      <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-bold">
+                        <Zap className="w-3 h-3" />
+                        <span>فتح فوري</span>
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Inline chapter files panel (expands below the card) */}
+                <AnimatePresence initial={false}>
+                  {expandedCourseId === course.id && (
+                    <motion.div
+                      key={`files-${course.id}`}
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className="col-span-full overflow-hidden"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="bg-slate-50 dark:bg-slate-900/60 border border-t-0 border-amber-200/60 dark:border-slate-800 rounded-b-2xl px-4 py-4">
+                        <CourseFilesPanel course={course} />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </React.Fragment>
             );
           })}

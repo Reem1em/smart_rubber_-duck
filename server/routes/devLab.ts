@@ -3,6 +3,9 @@ import type { Request, Response } from 'express';
 import { generateInteractive } from '../gemini';
 import { handleAssessmentFailure, handleModelFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
+import { buildSystemPrompt } from '../utils/loadAgent';
+
+const SYSTEM_PROMPT = buildSystemPrompt('04_TUTOR.md');
 import {
   buildCustomLabEvaluationPrompt,
   buildCustomLabFeedbackPrompt,
@@ -53,6 +56,7 @@ export const handleGenerateDevChallenge = async (req: Request, res: Response) =>
     const response = await generateInteractive({
       contents: prompt,
       config: {
+        systemInstruction: SYSTEM_PROMPT,
         responseMimeType: 'application/json',
         responseSchema: devChallengeSchema,
       },
@@ -99,6 +103,7 @@ export const handleEvaluateDevSubmission = async (req: Request, res: Response) =
     const response = await generateInteractive({
       contents: prompt,
       config: {
+        systemInstruction: SYSTEM_PROMPT,
         responseMimeType: 'application/json',
         responseSchema: devEvaluationSchema,
         // Code grading must follow strict logic with no creative deviation.
@@ -175,6 +180,7 @@ export const handleEvaluateCustomLab = async (req: Request, res: Response) => {
     const response = await generateInteractive({
       contents: prompt,
       config: {
+        systemInstruction: SYSTEM_PROMPT,
         responseMimeType: 'application/json',
         responseSchema: customLabEvaluationSchema,
         // Code grading must follow strict logic with no creative deviation.
@@ -227,6 +233,7 @@ async function evaluateExecutedCustomLab(
     const response = await generateInteractive({
       contents: buildCustomLabFeedbackPrompt(input),
       config: {
+        systemInstruction: SYSTEM_PROMPT,
         responseMimeType: 'application/json',
         responseSchema: customLabFeedbackSchema,
         temperature: 0.0,

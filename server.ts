@@ -6,6 +6,7 @@ import { mountAssets } from './server/static';
 import { initSessionSecret } from './server/auth/session';
 import { assertGeminiConfigured } from './server/gemini';
 import { jsonErrorHandler } from './server/httpSafety';
+import { preloadAllAgents } from './server/utils/loadAgent';
 
 dotenv.config();
 
@@ -19,6 +20,7 @@ const PORT = Number(process.env.PORT) || 3000;
 async function startServer() {
   await initSessionSecret();
   assertGeminiConfigured();
+  preloadAllAgents();
 
   const app = express();
 

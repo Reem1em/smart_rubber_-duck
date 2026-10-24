@@ -4,14 +4,16 @@ import { ThinkingLevel } from '@google/genai';
 import { generateWithRetry, isServerOverloadError } from '../gemini';
 import { mergeChunkModules, toRawModules, type RawModule } from '../materialMerge';
 import { parseModelJsonWithFences } from '../modelJson';
+import { buildSystemPrompt } from '../utils/loadAgent';
 import {
-  ANALYZE_MATERIAL_SYSTEM_INSTRUCTION,
   EXTRACTION_INSTRUCTIONS,
   buildDocumentChunkPrompt,
   buildDocumentTextPrompt,
 } from '../prompts/analyzeMaterial';
 import { analyzeMaterialSchema } from '../schemas/analyzeMaterial';
 import { chunkText } from '../textChunker';
+
+const SYSTEM_PROMPT = buildSystemPrompt('01_ANALYZER.md', '02_STRUCTURER.md');
 
 const MAX_TEXT_CHARS = 50_000;
 /** Texts at or above this length are split and analyzed chunk by chunk (map-reduce). */
@@ -25,7 +27,7 @@ async function extractModules(parts: any[]): Promise<RawModule[]> {
   const response = await generateWithRetry({
     contents: { parts },
     config: {
-      systemInstruction: ANALYZE_MATERIAL_SYSTEM_INSTRUCTION,
+      systemInstruction: SYSTEM_PROMPT,
       thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
       responseMimeType: 'application/json',
       responseSchema: analyzeMaterialSchema,

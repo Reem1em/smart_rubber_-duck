@@ -3,10 +3,13 @@ import type { Request, Response } from 'express';
 import { generateWithRetry, isQuotaOrRateLimitError } from '../gemini';
 import { handleAssessmentFailure } from '../routeErrors';
 import { parseModelJson } from '../modelJson';
+import { buildSystemPrompt } from '../utils/loadAgent';
 import { buildPracticeTestPrompt } from '../prompts/practiceTest';
 import { practiceTestSchema } from '../schemas/practiceTest';
 import { parsePracticeTestRequest, verifyPracticeQuestions } from '../practiceTest';
 import { isStemTopic } from '../stem';
+
+const SYSTEM_PROMPT = buildSystemPrompt('03_GENERATOR.md');
 
 /** Worked reasoning for up to 20 questions over ~60k chars of context takes longer than a quiz. */
 const PRACTICE_TEST_TIMEOUT_MS = 90_000;
@@ -27,6 +30,7 @@ export const handleGeneratePracticeTest = async (req: Request, res: Response) =>
       {
         contents: buildPracticeTestPrompt({ subjectId, difficulty, questionCount, documents, isStem }),
         config: {
+          systemInstruction: SYSTEM_PROMPT,
           responseMimeType: 'application/json',
           responseSchema: practiceTestSchema,
         },
