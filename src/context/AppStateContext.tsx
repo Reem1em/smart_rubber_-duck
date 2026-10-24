@@ -15,6 +15,8 @@ import {
   SocraticEvaluation,
   TransferChallenge,
   WorkspaceExport,
+  ExamAttempt,
+  StudentPerformance,
 } from '../types';
 import * as courseStore from '../services/courseStore';
 import { extractSlides, failedSlideSource } from '../services/ai';
@@ -135,6 +137,12 @@ interface AppState {
   /** Opens the course chat; `prompt` (or, without it, a concept's "explain" prompt) is sent as the first message. */
   openCourseChat: (concept?: Concept | null, prompt?: string) => void;
   closeCourseChat: () => void;
+
+  /* ---- Question Generator & Student Performance ---- */
+  selectedCourseId: string | null;
+  setSelectedCourseId: (id: string | null) => void;
+  performance: Record<string, StudentPerformance>;
+  addAttempt: (attempt: ExamAttempt) => void;
 }
 
 const AppStateContext = createContext<AppState | undefined>(undefined);
@@ -172,10 +180,93 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [pendingChatPrompt, setPendingChatPrompt] = useState<string | null>(null);
   const [courses, setCourses] = useState<SavedCourse[]>([]);
   const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [performance, setPerformance] = useState<Record<string, StudentPerformance>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('rubber_duck_student_performance');
+        if (saved) return JSON.parse(saved);
+      } catch {
+        // ignore
+      }
+    }
+    return {};
+  });
   const [isCoursesLoading, setIsCoursesLoading] = useState(true);
   const { status: authStatus, user } = useAuth();
   /** Owner stamped on saved courses; null keeps them as guest (local-only) courses. */
   const ownerId = user?.id ?? null;
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('rubber_duck_student_performance', JSON.stringify(performance));
+      } catch {
+        // ignore
+      }
+    }
+  }, [performance]);
+
+  const addAttempt = React.useCallback((attempt: ExamAttempt) => {
+    setPerformance((prev) => {
+      const courseId = attempt.courseId;
+      const prevCoursePerf = prev[courseId] ?? {
+        courseId,
+        totalAttempts: 0,
+        totalQuestionsAnswered: 0,
+        overallAccuracy: 0,
+        conceptAccuracy: {},
+        history: [],
+      };
+
+      const updatedHistory = [attempt, ...prevCoursePerf.history];
+      const updatedTotalAttempts = prevCoursePerf.totalAttempts + 1;
+      const updatedTotalQuestionsAnswered =
+        prevCoursePerf.totalQuestionsAnswered + attempt.totalQuestions;
+
+      // Update per-concept accuracy
+      const updatedConceptAcc = { ...prevCoursePerf.conceptAccuracy };
+
+      for (const qa of attempt.questionAttempts) {
+        const existing = updatedConceptAcc[qa.conceptId] ?? {
+          conceptId: qa.conceptId,
+          conceptName: qa.conceptName,
+          totalAnswered: 0,
+          correctCount: 0,
+          accuracyPercent: 0,
+        };
+
+        const totalAnswered = existing.totalAnswered + 1;
+        const correctCount = existing.correctCount + (qa.isCorrect ? 1 : 0);
+        const accuracyPercent = Math.round((correctCount / totalAnswered) * 100);
+
+        updatedConceptAcc[qa.conceptId] = {
+          conceptId: qa.conceptId,
+          conceptName: qa.conceptName,
+          totalAnswered,
+          correctCount,
+          accuracyPercent,
+        };
+      }
+
+      // Calculate new overall accuracy across all attempts for this course
+      const allQuestions = updatedHistory.reduce((sum, a) => sum + a.totalQuestions, 0);
+      const allCorrect = updatedHistory.reduce((sum, a) => sum + a.correctCount, 0);
+      const overallAccuracy = allQuestions > 0 ? Math.round((allCorrect / allQuestions) * 100) : 0;
+
+      return {
+        ...prev,
+        [courseId]: {
+          courseId,
+          totalAttempts: updatedTotalAttempts,
+          totalQuestionsAnswered: updatedTotalQuestionsAnswered,
+          overallAccuracy,
+          conceptAccuracy: updatedConceptAcc,
+          history: updatedHistory,
+        },
+      };
+    });
+  }, []);
 
   React.useEffect(() => {
     if (typeof document !== 'undefined') {
@@ -608,6 +699,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         consumePendingChatPrompt,
         openCourseChat,
         closeCourseChat,
+        selectedCourseId,
+        setSelectedCourseId,
+        performance,
+        addAttempt,
       }}
     >
       {children}

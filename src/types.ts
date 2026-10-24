@@ -597,3 +597,46 @@ export interface ChatMessage {
   timestamp: Date;
   audioUrl?: string;
 }
+
+/* ---- Question Generator & Real Student Performance Tracking ---- */
+
+export interface QuestionAttempt {
+  questionId: string;
+  conceptId: string;
+  conceptName: string;
+  userAnswerIndex: number;
+  correctAnswerIndex: number;
+  isCorrect: boolean;
+  timeSpentMs?: number;
+}
+
+export interface ExamAttempt {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  createdAt: number;
+  completedAt: number;
+  difficulty: '100' | '80' | '120';
+  totalQuestions: number;
+  correctCount: number;
+  scorePercent: number;
+  questionAttempts: QuestionAttempt[];
+}
+
+export interface ConceptPerformance {
+  conceptId: string;
+  conceptName: string;
+  totalAnswered: number;
+  correctCount: number;
+  accuracyPercent: number;
+}
+
+export interface StudentPerformance {
+  courseId: string;
+  totalAttempts: number;
+  totalQuestionsAnswered: number;
+  overallAccuracy: number;
+  conceptAccuracy: Record<string, ConceptPerformance>;
+  history: ExamAttempt[];
+}
+

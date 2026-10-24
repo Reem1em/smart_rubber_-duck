@@ -34,6 +34,7 @@ export const MyCoursesPanel: React.FC = () => {
     importWorkspace,
     setStep,
     activeCourseId,
+    setSelectedCourseId,
   } = useAppState();
 
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -262,7 +263,11 @@ export const MyCoursesPanel: React.FC = () => {
                           : <ChevronDown className="w-3 h-3" />}
                       </button>
                       <button
-                        onClick={(e) => { e.stopPropagation(); setStep('generateQuestions'); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedCourseId(course.id);
+                          setStep('generateQuestions');
+                        }}
                         title="ولّد أسئلة من نموذج لهذه المادة"
                         className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 px-2 py-0.5 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-950/60 transition-colors cursor-pointer"
                       >
