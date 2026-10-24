@@ -25,17 +25,21 @@ import {
   TrendingDown,
   RefreshCw,
   BarChart3,
+  Layers,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useAppState } from '../context/AppStateContext';
 import { Concept, SavedCourse, ExamAttempt, QuestionAttempt } from '../types';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TYPES
+// CONSTANTS & TYPES
 // ─────────────────────────────────────────────────────────────────────────────
+
+const MAX_QUESTIONS = 30;
 
 type GenStep = 'upload' | 'difficulty' | 'topics' | 'results';
 type Difficulty = '100' | '80' | '120';
-type QuestionSource = 'exam' | 'textbook' | 'synthesized';
+type QuestionSource = 'exam' | 'synthesized';
 type QuestionDifficulty = 'easy' | 'medium' | 'advanced';
 
 interface TopicRowData {
@@ -52,6 +56,16 @@ interface TopicRowData {
   difficultyOverride?: Difficulty;
 }
 
+interface UploadedExamQuestion {
+  id: string;
+  text: string;
+  topicId: string;
+  sourceType: 'exam';
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+}
+
 interface GeneratedQuizQuestion {
   id: string;
   conceptId: string;
@@ -63,10 +77,12 @@ interface GeneratedQuizQuestion {
   difficulty: QuestionDifficulty;
   source: QuestionSource;
   sourceLabel: string;
+  sourceType: 'exam' | 'generated';
+  examQuestionId?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HELPERS & DYNAMIC QUESTION SYNTHESIZER
+// PALETTE & HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TOPIC_COLORS = [
@@ -86,104 +102,62 @@ const getDifficultyLabel = (d: QuestionDifficulty) => {
   return 'متقدم';
 };
 
-const getSourceColor = (s: QuestionSource) => {
-  if (s === 'exam') return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border-indigo-300 dark:border-indigo-800';
-  if (s === 'textbook') return 'bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400 border-teal-300 dark:border-teal-800';
-  return 'bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400 border-violet-300 dark:border-violet-800';
+const getSourceColor = (sourceType: 'exam' | 'generated') => {
+  if (sourceType === 'exam') {
+    return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border-indigo-300 dark:border-indigo-800';
+  }
+  return 'bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400 border-teal-300 dark:border-teal-800';
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MOCK EXAM BANK BUILDER (KEYED BY REAL COURSE ID & CONCEPTS)
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * Synthesize grounded quiz questions strictly from the selected course's concepts.
- * No hardcoded course or topic names are used.
+ * Builds a realistic per-course mock exam bank (5–8 questions) tied to the course's real concepts.
+ * Rank 1 concept gets 4 exam questions.
+ * Rank 2 concept gets 3 exam questions.
+ * Rank 3 concept gets exactly 1 exam question (to demonstrate limited coverage fallback).
  */
-function synthesizeQuestionsFromCourse(
-  concepts: Concept[],
-  topics: TopicRowData[],
-  globalDifficulty: Difficulty
-): GeneratedQuizQuestion[] {
-  const result: GeneratedQuizQuestion[] = [];
-  const includedTopics = topics.filter((t) => t.included && t.questionCount > 0);
+function buildMockExamBankForCourse(course: SavedCourse): UploadedExamQuestion[] {
+  if (!course || !course.concepts || course.concepts.length === 0) return [];
 
-  includedTopics.forEach((t) => {
-    const concept = concepts.find((c) => c.id === t.id);
-    if (!concept) return;
+  const bank: UploadedExamQuestion[] = [];
+  const concepts = course.concepts;
 
-    const otherConcepts = concepts.filter((c) => c.id !== t.id);
-    const count = t.questionCount;
-    const diffSetting = t.difficultyOverride || globalDifficulty;
+  concepts.forEach((concept, cIdx) => {
+    // Quota: Rank 0 gets 4, Rank 1 gets 3, Rank 2 gets 1 (limited coverage scenario), others 1
+    const quota = cIdx === 0 ? 4 : cIdx === 1 ? 3 : 1;
+    const otherConcepts = concepts.filter((c) => c.id !== concept.id);
 
-    for (let i = 0; i < count; i++) {
-      const qPattern = i % 3;
+    for (let qIdx = 0; qIdx < quota; qIdx++) {
       let text = '';
-      let correctAnswer = '';
-      let explanation = '';
-      let distractors: string[] = [];
+      let correctAns = concept.summary || (concept.keyPrinciples[0] ?? `المبدأ الأساسي في ${concept.name}`);
+      let explanation = `وفقاً لنموذج الاختبار المقرر: ${concept.summary || concept.name}.`;
 
-      const qDiff: QuestionDifficulty =
-        diffSetting === '120'
-          ? i % 2 === 0 ? 'advanced' : 'medium'
-          : diffSetting === '80'
-          ? i % 2 === 0 ? 'medium' : 'easy'
-          : i % 3 === 0 ? 'easy' : i % 3 === 1 ? 'medium' : 'advanced';
-
-      const source: QuestionSource =
-        i % 3 === 0 ? 'exam' : i % 3 === 1 ? 'textbook' : 'synthesized';
-
-      const sourceLabel =
-        source === 'exam'
-          ? 'من نموذجك المرفوع'
-          : source === 'textbook'
-          ? concept.chapterOrUnit
-            ? `من مقرر ${concept.chapterOrUnit}`
-            : 'من محتوى المقرر'
-          : 'مولّد — داخل نطاق المقرر';
-
-      if (qPattern === 0) {
-        text = `ما هو التعريف العلمي الأدق لمفهوم "${concept.name}" والمبدأ الأساسي الذي يحكمه؟`;
-        correctAnswer = concept.summary || (concept.keyPrinciples[0] ?? `هو مفهوم رئيسي يختص بدراسة وتطبيق أسس ${concept.name}.`);
-        explanation = `وفقاً للمقرر: ${concept.summary || concept.name}.`;
-
-        distractors = otherConcepts.length >= 3
-          ? otherConcepts.slice(0, 3).map((oc) => oc.summary || `يرتبط بمفهوم ${oc.name} وليس ${concept.name}`)
-          : [
-              `مفهوم بديل يتعارض مع المتطلبات الأساسية لـ ${concept.name}`,
-              `إجراء تطبيقي لا يتصل بصورة مباشرة بمبادئ ${concept.name}`,
-              `حالة افتراضية تنطبق فقط عند غياب العوامل الأساسية`,
-            ];
-      } else if (qPattern === 1) {
-        const principle =
-          concept.keyPrinciples[i % Math.max(1, concept.keyPrinciples.length)] ||
-          concept.summary ||
-          `التحليل المنهجي لقواعد ${concept.name}`;
-        text = `أي من الخيارات التالية يُعد من الركائز والمبادئ الأساسية لموضوع "${concept.name}"؟`;
-        correctAnswer = principle;
-        explanation = `المبدأ الرئيسي المعتمد في المادة: ${principle}.`;
-
-        distractors = [
-          `تجاهل العلاقات التكاملية والاعتماد على الحلول التقديرية فقط`,
-          `عكس التسلسل المنطقي للعملية وإلغاء شروط التحقق المسبقة`,
-          `حصر التطبيق في بيئة معزولة دون مراعاة القواعد النظرية الأساسية`,
-        ];
-        if (otherConcepts.length > 0) {
-          const otherP = otherConcepts[0].keyPrinciples[0] || otherConcepts[0].summary;
-          if (otherP) distractors[0] = otherP;
-        }
+      if (qIdx === 0) {
+        text = `سؤال من النموذج المرفوع: ما هو الأساس النظري والتطبيقي لـ "${concept.name}"؟`;
+      } else if (qIdx === 1) {
+        text = `وفقاً لنموذج الاختبار: أي العبارات التالية تحدد بشكل دقيق وظيفة "${concept.name}"؟`;
+        correctAns = concept.keyPrinciples[0] || concept.summary;
+      } else if (qIdx === 2) {
+        text = `مسألة من النموذج: ما الأثر المباشر لمبدأ "${concept.name}" في سياق المادة؟`;
+        correctAns = concept.keyPrinciples[1] || `التطبيق العملي السليم لقواعد ${concept.name}`;
       } else {
-        text = `عند تطبيق مبادئ "${concept.name}" في سياق عملي أو تحليلي، ما النتيجة المترتبة علمياً؟`;
-        const principle = concept.keyPrinciples[0] || concept.summary || concept.name;
-        correctAnswer = `تحقيق الترابط وتطبيق قواعد ${concept.name} بشكل منهجي`;
-        explanation = `التطبيق السليم يستلزم: ${principle}.`;
-
-        distractors = [
-          `حدوث اختلال في التوازن وتعطيل المراحل اللاحقة للعملية`,
-          `انخفاض الكفاءة نتيجة التناقض مع المبادئ المعيارية للتحليل`,
-          `ثبات المتغيرات دون أي تأثير إيجابي على نواتج الفهم والتقييم`,
-        ];
+        text = `سؤال اختياري من النموذج: ما الركيزة المحورية التي يعتمد عليها "${concept.name}"؟`;
+        correctAns = concept.keyPrinciples[2] || concept.summary;
       }
 
-      // Deterministic shuffle of options
-      const allOpts = [correctAnswer, ...distractors.slice(0, 3)];
-      const seed = (i * 7 + t.name.length * 13) % 4;
+      const distractors = otherConcepts.length >= 3
+        ? otherConcepts.slice(0, 3).map((oc) => oc.summary || `يرتبط بمفهوم ${oc.name} وليس ${concept.name}`)
+        : [
+            `مفهوم بديل يتعارض مع متطلبات ${concept.name}`,
+            `إجراء تطبيقي لا يتصل بصورة مباشرة بمبادئ ${concept.name}`,
+            `حالة افتراضية تنطبق فقط عند غياب العوامل الأساسية`,
+          ];
+
+      const allOpts = [correctAns, ...distractors.slice(0, 3)];
+      const seed = (qIdx * 3 + cIdx * 7) % 4;
       const shuffled = [...allOpts];
       if (seed > 0 && seed < shuffled.length) {
         const temp = shuffled[0];
@@ -191,24 +165,285 @@ function synthesizeQuestionsFromCourse(
         shuffled[seed] = temp;
       }
 
-      const correctIndex = shuffled.indexOf(correctAnswer);
-
-      result.push({
-        id: `gen-${concept.id}-${i}-${Date.now()}`,
-        conceptId: concept.id,
-        conceptName: concept.name,
+      bank.push({
+        id: `exam-${course.id}-${concept.id}-${qIdx}`,
         text,
+        topicId: concept.id,
+        sourceType: 'exam',
         options: shuffled,
-        correctIndex: correctIndex >= 0 ? correctIndex : 0,
+        correctIndex: shuffled.indexOf(correctAns) >= 0 ? shuffled.indexOf(correctAns) : 0,
         explanation,
-        difficulty: qDiff,
-        source,
-        sourceLabel,
       });
     }
   });
 
-  return result;
+  return bank;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// QUESTION GENERATOR (EXACT COUNT + DEDUPLICATION + SOURCE PRIORITY)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface SynthesisOutput {
+  questions: GeneratedQuizQuestion[];
+  limitedCoverageTopicIds: string[];
+  totalClamped: boolean;
+}
+
+function synthesizeQuestions(
+  concepts: Concept[],
+  topics: TopicRowData[],
+  uploadedExamQuestions: UploadedExamQuestion[],
+  globalDifficulty: Difficulty,
+  maxQuestions: number = MAX_QUESTIONS
+): SynthesisOutput {
+  const result: GeneratedQuizQuestion[] = [];
+  const seenTexts = new Set<string>();
+  const limitedCoverageTopicIds: string[] = [];
+
+  const normalize = (str: string) =>
+    str.trim().toLowerCase().replace(/[\s\u200B-\u200D\uFEFF]+/g, ' ');
+
+  const isUniqueText = (text: string): boolean => {
+    const norm = normalize(text);
+    if (seenTexts.has(norm)) return false;
+    seenTexts.add(norm);
+    return true;
+  };
+
+  const activeTopics = topics.filter((t) => t.included && t.questionCount > 0);
+  const rawTotal = activeTopics.reduce((s, t) => s + t.questionCount, 0);
+  const totalClamped = rawTotal > maxQuestions;
+  const targetTotal = Math.min(rawTotal, maxQuestions);
+
+  // Allocate exact target counts per topic
+  let allocatedCounts: { topic: TopicRowData; count: number }[] = [];
+  if (!totalClamped) {
+    allocatedCounts = activeTopics.map((t) => ({ topic: t, count: t.questionCount }));
+  } else {
+    let currentSum = 0;
+    allocatedCounts = activeTopics.map((t, idx) => {
+      if (idx === activeTopics.length - 1) {
+        return { topic: t, count: Math.max(1, targetTotal - currentSum) };
+      }
+      const c = Math.max(1, Math.round((t.questionCount / rawTotal) * targetTotal));
+      currentSum += c;
+      return { topic: t, count: c };
+    });
+    const diff = targetTotal - allocatedCounts.reduce((s, a) => s + a.count, 0);
+    if (diff !== 0 && allocatedCounts.length > 0) {
+      allocatedCounts[0].count += diff;
+    }
+  }
+
+  // Define at least 4 distinct Arabic templates per concept (BUG 3)
+  const getTemplatesForConcept = (c: Concept) => [
+    {
+      getText: () => `ما المقصود بـ "${c.name}"؟`,
+      getAnswer: () => c.summary || (c.keyPrinciples[0] ?? `المفهوم الرئيسي لـ ${c.name}`),
+      getExplanation: () => `وفقاً للمقرر: ${c.summary || c.name}.`,
+      isNegative: false,
+    },
+    {
+      getText: () => `أي مما يلي يصف "${c.name}" بشكل صحيح؟`,
+      getAnswer: () => c.keyPrinciples[0] || c.summary,
+      getExplanation: () => `المبدأ الرئيسي المعتمد: ${c.keyPrinciples[0] || c.summary}.`,
+      isNegative: false,
+    },
+    {
+      getText: () => `"${c.name}" يرتبط مباشرة بـ...`,
+      getAnswer: () => c.keyPrinciples[1] || `التطبيق العملي السليم لمبادئ ${c.name}`,
+      getExplanation: () => `يرتبط مباشرة بـ: ${c.keyPrinciples[1] || c.name}.`,
+      isNegative: false,
+    },
+    {
+      getText: () => `أي العبارات التالية خاطئة عن "${c.name}"؟`,
+      getAnswer: () => `يتعارض ${c.name} تماماً مع المتطلبات المنهجية للمقرر`,
+      getExplanation: () => `العبارة الخاطئة هي التي تزعم تعارض ${c.name} مع متطلبات المقرر.`,
+      isNegative: true,
+    },
+    {
+      getText: () => `ما المبدأ الأساسي الذي يحكم "${c.name}" في التطبيق العملي؟`,
+      getAnswer: () => c.keyPrinciples[2] || c.summary,
+      getExplanation: () => `المبدأ الأساسي: ${c.keyPrinciples[2] || c.summary}.`,
+      isNegative: false,
+    },
+    {
+      getText: () => `ما الوظيفة التشغيلية أو المعرفية الرئيسية لـ "${c.name}"؟`,
+      getAnswer: () => c.summary || (c.keyPrinciples[0] ?? c.name),
+      getExplanation: () => `الوظيفة المحورية: ${c.summary || c.name}.`,
+      isNegative: false,
+    },
+    {
+      getText: () => `كيف يسهم "${c.name}" في تحقيق الاستيعاب المتكامل للمقرر؟`,
+      getAnswer: () => c.keyPrinciples[0] || c.summary,
+      getExplanation: () => `المساهمة المنهجية: ${c.keyPrinciples[0] || c.summary}.`,
+      isNegative: false,
+    },
+    {
+      getText: () => `ما النتيجة المتوقعة عند إعمال مبادئ "${c.name}" بصورة معيارية؟`,
+      getAnswer: () => c.keyPrinciples[1] || `تحقيق الترابط وتطبيق أسس ${c.name}`,
+      getExplanation: () => `الأثر التطبيقي: ${c.keyPrinciples[1] || c.name}.`,
+      isNegative: false,
+    },
+    {
+      getText: () => `أي من الخيارات يمثل التطبيق الأكثر ملاءمة لـ "${c.name}"؟`,
+      getAnswer: () => c.keyPrinciples[0] || c.summary,
+      getExplanation: () => `التطبيق السليم يستند إلى: ${c.keyPrinciples[0] || c.summary}.`,
+      isNegative: false,
+    },
+    {
+      getText: () => `في سياق التحليل المقارن، ما الميزة الأساسية لـ "${c.name}"؟`,
+      getAnswer: () => c.summary || c.name,
+      getExplanation: () => `الميزة الأساسية: ${c.summary || c.name}.`,
+      isNegative: false,
+    },
+  ];
+
+  allocatedCounts.forEach(({ topic, count }) => {
+    const concept = concepts.find((c) => c.id === topic.id);
+    if (!concept) return;
+
+    const otherConcepts = concepts.filter((c) => c.id !== topic.id);
+
+    // 1. Priority 1: Pull from uploadedExamQuestions
+    const examPool = uploadedExamQuestions.filter((eq) => eq.topicId === topic.id);
+    let pulledFromExam = 0;
+
+    for (const eq of examPool) {
+      if (pulledFromExam >= count) break;
+      if (isUniqueText(eq.text)) {
+        result.push({
+          id: eq.id,
+          conceptId: concept.id,
+          conceptName: concept.name,
+          text: eq.text,
+          options: eq.options,
+          correctIndex: eq.correctIndex,
+          explanation: eq.explanation,
+          difficulty: 'medium',
+          source: 'exam',
+          sourceLabel: 'من نموذجك',
+          sourceType: 'exam',
+          examQuestionId: eq.id,
+        });
+        pulledFromExam++;
+      }
+    }
+
+    // 2. Priority 2: Fill remainder from distinct templates
+    const remainder = count - pulledFromExam;
+    if (remainder > 0) {
+      if (!limitedCoverageTopicIds.includes(topic.id)) {
+        limitedCoverageTopicIds.push(topic.id);
+      }
+
+      const templates = getTemplatesForConcept(concept);
+      let genAdded = 0;
+      let tIdx = 0;
+
+      while (genAdded < remainder && tIdx < templates.length) {
+        const tmpl = templates[tIdx];
+        const qText = tmpl.getText();
+
+        if (isUniqueText(qText)) {
+          const correctAns = tmpl.getAnswer();
+          let distractors: string[] = [];
+
+          if (tmpl.isNegative) {
+            distractors = [
+              `يُعد من المفاهيم الأساسية المقررة في المادة`,
+              `يعتمد على تطبيق القواعد العلمية المنهجية`,
+              `يسهم في ترابط مخرجات التعلم الأكاديمية`,
+            ];
+          } else {
+            distractors = otherConcepts.length >= 3
+              ? otherConcepts.slice(0, 3).map((oc) => oc.summary || `يرتبط بمفهوم ${oc.name} وليس ${concept.name}`)
+              : [
+                  `مفهوم بديل يتعارض مع متطلبات ${concept.name}`,
+                  `إجراء تطبيقي لا يتصل بصورة مباشرة بمبادئ ${concept.name}`,
+                  `حالة افتراضية تنطبق فقط عند غياب العوامل الأساسية`,
+                ];
+          }
+
+          const allOpts = [correctAns, ...distractors.slice(0, 3)];
+          const seed = (tIdx * 5 + concept.name.length) % 4;
+          const shuffled = [...allOpts];
+          if (seed > 0 && seed < shuffled.length) {
+            const temp = shuffled[0];
+            shuffled[0] = shuffled[seed];
+            shuffled[seed] = temp;
+          }
+
+          const qDiff: QuestionDifficulty =
+            globalDifficulty === '120' ? 'advanced' : globalDifficulty === '80' ? 'medium' : 'easy';
+
+          result.push({
+            id: `gen-${concept.id}-${tIdx}-${Date.now()}`,
+            conceptId: concept.id,
+            conceptName: concept.name,
+            text: qText,
+            options: shuffled,
+            correctIndex: shuffled.indexOf(correctAns) >= 0 ? shuffled.indexOf(correctAns) : 0,
+            explanation: tmpl.getExplanation(),
+            difficulty: qDiff,
+            source: 'synthesized',
+            sourceLabel: 'مولّد داخل نطاق المقرر',
+            sourceType: 'generated',
+          });
+
+          genAdded++;
+        }
+        tIdx++;
+      }
+    }
+  });
+
+  // If still below targetTotal due to template exhaustion in a specific topic,
+  // rotate through active concepts: "Rotate templates per concept index. If templates exhausted → move to next concept, do not duplicate."
+  let rotateCycle = 0;
+  while (result.length < targetTotal && rotateCycle < activeTopics.length * 10) {
+    const topic = activeTopics[rotateCycle % activeTopics.length];
+    const concept = concepts.find((c) => c.id === topic.id);
+    if (concept) {
+      const templates = getTemplatesForConcept(concept);
+      const tIdx = (rotateCycle + 3) % templates.length;
+      const tmpl = templates[tIdx];
+      const qText = tmpl.getText();
+
+      if (isUniqueText(qText)) {
+        const correctAns = tmpl.getAnswer();
+        const otherConcepts = concepts.filter((c) => c.id !== concept.id);
+        const distractors = otherConcepts.length >= 3
+          ? otherConcepts.slice(0, 3).map((oc) => oc.summary || `يرتبط بمفهوم ${oc.name} وليس ${concept.name}`)
+          : [
+              `مفهوم بديل يتعارض مع متطلبات ${concept.name}`,
+              `إجراء تطبيقي لا يتصل بصورة مباشرة بمبادئ ${concept.name}`,
+              `حالة افتراضية تنطبق فقط عند غياب العوامل الأساسية`,
+            ];
+
+        const allOpts = [correctAns, ...distractors.slice(0, 3)];
+        const shuffled = [...allOpts];
+
+        result.push({
+          id: `gen-rot-${concept.id}-${tIdx}-${Date.now()}-${rotateCycle}`,
+          conceptId: concept.id,
+          conceptName: concept.name,
+          text: qText,
+          options: shuffled,
+          correctIndex: 0,
+          explanation: tmpl.getExplanation(),
+          difficulty: 'medium',
+          source: 'synthesized',
+          sourceLabel: 'مولّد داخل نطاق المقرر',
+          sourceType: 'generated',
+        });
+      }
+    }
+    rotateCycle++;
+  }
+
+  return { questions: result, limitedCoverageTopicIds, totalClamped };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -389,9 +624,10 @@ const StackedBarChart: React.FC<StackedBarChartProps> = ({ topics }) => {
 interface TopicRowProps {
   topic: TopicRowData;
   masteryInfo?: { accuracyPercent: number; totalAnswered: number } | null;
+  limitedExamWarning?: boolean;
   onChange: (updated: TopicRowData) => void;
 }
-const TopicRow: React.FC<TopicRowProps> = ({ topic, masteryInfo, onChange }) => {
+const TopicRow: React.FC<TopicRowProps> = ({ topic, masteryInfo, limitedExamWarning, onChange }) => {
   return (
     <div
       className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border transition-all duration-200 ${
@@ -408,7 +644,7 @@ const TopicRow: React.FC<TopicRowProps> = ({ topic, masteryInfo, onChange }) => 
           onChange={(e) => onChange({ ...topic, included: e.target.checked })}
           className="w-4.5 h-4.5 mt-0.5 sm:mt-0 rounded-md border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
         />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <label htmlFor={`topic-${topic.id}`} className="font-bold text-sm text-slate-800 dark:text-slate-100 cursor-pointer">
               {topic.name}
@@ -418,12 +654,8 @@ const TopicRow: React.FC<TopicRowProps> = ({ topic, masteryInfo, onChange }) => 
                 {topic.chapterOrUnit}
               </span>
             )}
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-              topic.coverageQuality === 'good'
-                ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800'
-                : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-            }`}>
-              {topic.coverageQuality === 'good' ? 'تغطية جيدة' : 'تغطية محدودة'}
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600">
+              وزن النموذج: {topic.examPercent}%
             </span>
 
             {/* CONDITIONAL MASTERY: ONLY visible if real prior attempts exist in AppStateContext */}
@@ -442,16 +674,19 @@ const TopicRow: React.FC<TopicRowProps> = ({ topic, masteryInfo, onChange }) => 
                 <span className="opacity-70 text-[9px]">({masteryInfo.totalAnswered} إجابات)</span>
               </span>
             )}
-
-            {topic.isFocused && (
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                مكثّف 💡
-              </span>
-            )}
           </div>
+
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-1">
             {topic.summary}
           </p>
+
+          {/* Limited exam coverage note (BUG 4) */}
+          {limitedExamWarning && (
+            <p className="text-[11px] font-bold text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+              <Info className="w-3 h-3 shrink-0" />
+              تغطية النموذج لهذا الموضوع محدودة — تم إضافة أسئلة مولّدة.
+            </p>
+          )}
         </div>
       </div>
 
@@ -471,8 +706,8 @@ const TopicRow: React.FC<TopicRowProps> = ({ topic, masteryInfo, onChange }) => 
           </span>
           <button
             type="button"
-            disabled={!topic.included || topic.questionCount >= 10}
-            onClick={() => onChange({ ...topic, questionCount: Math.min(10, topic.questionCount + 1) })}
+            disabled={!topic.included || topic.questionCount >= 15}
+            onClick={() => onChange({ ...topic, questionCount: Math.min(15, topic.questionCount + 1) })}
             className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 disabled:opacity-30 cursor-pointer font-bold text-xs"
             aria-label="زيادة الأسئلة"
           >
@@ -609,7 +844,6 @@ const CourseSelectModal: React.FC<CourseSelectModalProps> = ({
         </div>
 
         {courses.length === 0 ? (
-          // EMPTY STATE: Disabled proceed and directs to upload
           <div className="text-center py-6 px-3 space-y-4">
             <div className="w-14 h-14 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl flex items-center justify-center mx-auto text-amber-600 dark:text-amber-400">
               <BookOpen className="w-7 h-7" />
@@ -785,7 +1019,6 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
     setStep,
   } = useAppState();
 
-  // Active selected course resolved from AppStateContext
   const activeCourseId = preselectedCourseId || selectedCourseId;
   const selectedCourse = useMemo(
     () => courses.find((c) => c.id === activeCourseId) || null,
@@ -811,13 +1044,18 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
   const [analysisSubSteps, setAnalysisSubSteps] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Mock Exam Bank (populated in Step 1, keyed by real course.id) - BUG 4
+  const [uploadedExamQuestions, setUploadedExamQuestions] = useState<UploadedExamQuestion[]>([]);
+
   // Step 2: Difficulty state
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>('100');
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  // Step 3: Topics state (derived from selectedCourse.concepts)
+  // Step 3: Topics state (derived from selectedCourse.concepts + ranked by examPercent)
   const [topics, setTopics] = useState<TopicRowData[]>([]);
+  const [manualOverrideOpen, setManualOverrideOpen] = useState(false); // Collapsed by default - BUG 1
   const [isGenerating, setIsGenerating] = useState(false);
+  const [limitedCoverageTopics, setLimitedCoverageTopics] = useState<string[]>([]);
 
   // Step 4: Questions & Interactive Quiz Flow state
   const [questions, setQuestions] = useState<GeneratedQuizQuestion[]>([]);
@@ -827,31 +1065,63 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
   const [activeTopicFilter, setActiveTopicFilter] = useState<string>('all');
   const [quizStartTime, setQuizStartTime] = useState<number>(0);
 
-  // Populate topics when selectedCourse changes
+  // Auto-detect focus topics and populate frequency weights on course change (BUG 1 & BUG 4)
   useEffect(() => {
     if (!selectedCourse || selectedCourse.concepts.length === 0) {
       setTopics([]);
+      setUploadedExamQuestions([]);
       return;
     }
 
-    const n = selectedCourse.concepts.length;
-    const basePct = Math.floor(100 / n);
-    const remainder = 100 - basePct * n;
+    const concepts = selectedCourse.concepts;
+    const n = concepts.length;
 
-    const initialRows: TopicRowData[] = selectedCourse.concepts.map((c, idx) => ({
-      id: c.id,
-      name: c.name,
-      summary: c.summary,
-      chapterOrUnit: c.chapterOrUnit,
-      keyPrinciples: c.keyPrinciples,
-      examPercent: basePct + (idx === 0 ? remainder : 0),
-      coverageQuality: c.keyPrinciples.length >= 2 ? 'good' : 'limited',
-      included: true,
-      questionCount: 3,
-      isFocused: false,
-    }));
+    // Distribute realistic exam frequency weights (examPercent) from model analysis
+    let weights: number[] = [];
+    if (n === 1) {
+      weights = [100];
+    } else if (n === 2) {
+      weights = [60, 40];
+    } else if (n === 3) {
+      weights = [45, 35, 20];
+    } else {
+      // Top 3 get 40%, 30%, 20%, remainder split among others
+      const rem = 10;
+      const remEach = Math.max(1, Math.floor(rem / (n - 3)));
+      weights = [40, 30, 20];
+      for (let i = 3; i < n; i++) {
+        weights.push(i === n - 1 ? rem - remEach * (n - 4) : remEach);
+      }
+    }
+
+    // Pre-check top 3 concepts and pre-fill counts proportionally (5, 3, 2)
+    // Other concepts start unchecked (included: false, count: 1)
+    const initialRows: TopicRowData[] = concepts.map((c, idx) => {
+      const isTop1 = idx === 0;
+      const isTop2 = idx === 1;
+      const isTop3 = idx === 2;
+      const isTop = isTop1 || isTop2 || isTop3;
+      const count = isTop1 ? 5 : isTop2 ? 3 : isTop3 ? 2 : 1;
+
+      return {
+        id: c.id,
+        name: c.name,
+        summary: c.summary,
+        chapterOrUnit: c.chapterOrUnit,
+        keyPrinciples: c.keyPrinciples,
+        examPercent: weights[idx] ?? Math.floor(100 / n),
+        coverageQuality: c.keyPrinciples.length >= 2 ? 'good' : 'limited',
+        included: isTop, // Pre-check top 3
+        questionCount: count, // Proportional: 5, 3, 2
+        isFocused: isTop,
+      };
+    });
 
     setTopics(initialRows);
+
+    // Build the per-course mock exam bank tied to real concept IDs
+    const examBank = buildMockExamBankForCourse(selectedCourse);
+    setUploadedExamQuestions(examBank);
   }, [selectedCourse]);
 
   // Ensure modal state syncs with course existence
@@ -860,6 +1130,18 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
       setShowCourseModal(true);
     }
   }, [selectedCourse]);
+
+  // Top 3 focus concepts ranked by examPercent (BUG 1)
+  const top3Topics = useMemo(() => {
+    return [...topics].sort((a, b) => b.examPercent - a.examPercent).slice(0, 3);
+  }, [topics]);
+
+  // Total requested questions and clamp detection (BUG 2)
+  const includedTopics = useMemo(() => topics.filter((t) => t.included), [topics]);
+  const totalRequestedQuestions = useMemo(() => {
+    return includedTopics.reduce((sum, t) => sum + t.questionCount, 0);
+  }, [includedTopics]);
+  const isOverMaxQuestions = totalRequestedQuestions > MAX_QUESTIONS;
 
   // Helpers
   const completeStep = (step: GenStep) => {
@@ -880,6 +1162,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
     setIsAnalyzing(false);
     setAnalysisSubSteps([]);
     setSelectedDifficulty('100');
+    setManualOverrideOpen(false);
     setQuestions([]);
     setQuizMode('quiz');
     setCurrentQuestionIndex(0);
@@ -887,7 +1170,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
     setActiveTopicFilter('all');
   };
 
-  // Upload simulation
+  // Upload simulation in Step 1
   const simulateUpload = (file: File) => {
     setUploadedFile(file);
     setUploadProgress(0);
@@ -914,13 +1197,14 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
     if (file) simulateUpload(file);
   };
 
+  // Step 1 Analysis handler (populates exam questions bank)
   const handleAnalyze = () => {
     setIsAnalyzing(true);
     setAnalysisSubSteps([]);
     const subSteps = [
       'استخراج أسئلة النموذج ومفرداته...',
       'مطابقة المفاهيم بنطاق المقرر المحدد...',
-      'تحليل توزيع الأوزان النسبية...',
+      'تحليل توزيع الأوزان النسبية وتحديد أعلى تركيز...',
     ];
     let i = 0;
     const interval = setInterval(() => {
@@ -930,6 +1214,10 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
       } else {
         clearInterval(interval);
         setTimeout(() => {
+          if (selectedCourse) {
+            const bank = buildMockExamBankForCourse(selectedCourse);
+            setUploadedExamQuestions(bank);
+          }
           setIsAnalyzing(false);
           completeStep('upload');
           goToStep('difficulty');
@@ -938,17 +1226,21 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
     }, 450);
   };
 
-  // Generate Questions handler
+  // Generate Questions handler (Enforces exact count, deduplication, and source priority)
   const handleGenerate = () => {
     if (!selectedCourse) return;
     setIsGenerating(true);
     setTimeout(() => {
-      const generated = synthesizeQuestionsFromCourse(
+      const { questions: generated, limitedCoverageTopicIds } = synthesizeQuestions(
         selectedCourse.concepts,
         topics,
-        selectedDifficulty
+        uploadedExamQuestions,
+        selectedDifficulty,
+        MAX_QUESTIONS
       );
+
       setQuestions(generated);
+      setLimitedCoverageTopics(limitedCoverageTopicIds);
       setUserAnswers({});
       setCurrentQuestionIndex(0);
       setQuizMode('quiz');
@@ -957,24 +1249,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
       completeStep('topics');
       goToStep('results');
       setActiveTopicFilter('all');
-    }, 1200);
-  };
-
-  // User-driven focus toggle (Section 3: "ما تريد التركيز عليه")
-  const toggleTopicFocus = (topicId: string) => {
-    setTopics((prev) =>
-      prev.map((t) => {
-        if (t.id === topicId) {
-          const nextFocus = !t.isFocused;
-          return {
-            ...t,
-            isFocused: nextFocus,
-            questionCount: nextFocus ? Math.min(10, t.questionCount + 2) : Math.max(1, t.questionCount - 2),
-          };
-        }
-        return t;
-      })
-    );
+    }, 1000);
   };
 
   // Quiz submission & performance persistence
@@ -1011,7 +1286,6 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
       questionAttempts,
     };
 
-    // Persist real attempt to AppStateContext
     addAttempt(attemptRecord);
     setQuizMode('results');
   };
@@ -1046,7 +1320,6 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
       accuracy: Math.round((t.correct / t.total) * 100),
     }));
 
-    // Real weak topics computed from actual mistakes
     const weakTopics = [...topicAccuracyList]
       .filter((t) => t.accuracy < 100)
       .sort((a, b) => a.accuracy - b.accuracy || (b.total - b.correct) - (a.total - a.correct))
@@ -1067,6 +1340,9 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
   // Generate 10 targeted questions for the weakest topic
   const handleGenerateTargetedWeak = (weakestConceptId: string) => {
     if (!selectedCourse) return;
+    const targetTopic = topics.find((t) => t.id === weakestConceptId);
+    if (!targetTopic) return;
+
     setTopics((prev) =>
       prev.map((t) => ({
         ...t,
@@ -1075,26 +1351,27 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
         isFocused: t.id === weakestConceptId,
       }))
     );
+
     setIsGenerating(true);
     setTimeout(() => {
-      const targetTopic = topics.find((t) => t.id === weakestConceptId);
-      const generated = synthesizeQuestionsFromCourse(
+      const singleTopicList: TopicRowData[] = [
+        {
+          ...targetTopic,
+          included: true,
+          questionCount: 10,
+        },
+      ];
+
+      const { questions: generated, limitedCoverageTopicIds } = synthesizeQuestions(
         selectedCourse.concepts,
-        [
-          {
-            id: weakestConceptId,
-            name: targetTopic?.name || '',
-            summary: targetTopic?.summary || '',
-            keyPrinciples: targetTopic?.keyPrinciples || [],
-            examPercent: 100,
-            coverageQuality: 'good',
-            included: true,
-            questionCount: 10,
-          },
-        ],
-        selectedDifficulty
+        singleTopicList,
+        uploadedExamQuestions,
+        selectedDifficulty,
+        10
       );
+
       setQuestions(generated);
+      setLimitedCoverageTopics(limitedCoverageTopicIds);
       setUserAnswers({});
       setCurrentQuestionIndex(0);
       setQuizMode('quiz');
@@ -1102,7 +1379,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
       setIsGenerating(false);
       goToStep('results');
       setActiveTopicFilter('all');
-    }, 1000);
+    }, 800);
   };
 
   const handleSaveExam = (name: string) => {
@@ -1163,7 +1440,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
               رفع نموذج وتوليد أسئلة مخصصة
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              حلّل نموذج الاختبار، اختر مستوى الصعوبة، ثم اختبر معلوماتك واكتشف نقاط الضعف الحقيقية.
+              حلّل نموذج الاختبار، رصد أعلى مواضيع التركيز تلقائياً، ثم اختبر معلوماتك واكتشف أدائك الحقيقي.
             </p>
           </div>
 
@@ -1406,7 +1683,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
         )}
 
         {/* ═══════════════════════════════════════════════════════════════
-            STEP 3: TOPICS — "تحليل النموذج" (EPISTEMIC FIX)
+            STEP 3: TOPICS — "تحليل النموذج" (BUG 1 FIX)
         ═══════════════════════════════════════════════════════════════ */}
         {currentStep === 'topics' && (
           <div className="flex flex-col gap-5">
@@ -1420,7 +1697,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
               </p>
             </div>
 
-            {/* MANDATORY INFO BANNER (Per Bug 2 Requirement) */}
+            {/* MANDATORY INFO BANNER (Epistemic clarity) */}
             <div className="bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/60 rounded-2xl p-4 flex items-start gap-3">
               <Info className="w-5 h-5 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
               <div>
@@ -1433,72 +1710,91 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
               </div>
             </div>
 
-            {/* OPTIONAL USER-DRIVEN FOCUS SECTION (Never labeled as weakness) */}
-            <div className="bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="text-base">💡</span>
-                <div>
-                  <h3 className="text-xs font-black text-slate-800 dark:text-slate-200">
-                    ما تريد التركيز عليه (اختياري)
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    حدد المفاهيم التي ترغب في تكثيف أسئلتها أثناء الاختبار:
-                  </p>
+            {/* AUTO-DETECTED FOCUS CALLOUT (BUG 1 FIX) */}
+            {top3Topics.length > 0 && (
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/40 dark:to-purple-950/40 border border-indigo-200 dark:border-indigo-800/70 rounded-2xl p-4.5 space-y-1.5 shadow-xs">
+                <div className="flex items-start gap-3">
+                  <span className="text-xl shrink-0 mt-0.5">🎯</span>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-xs sm:text-sm font-black text-indigo-950 dark:text-indigo-200 leading-snug">
+                      كواكلي رصد أعلى تركيز في نموذجك على: {top3Topics.map((t) => t.name).join('، ')}
+                    </h3>
+                    <p className="text-[11px] text-indigo-800/80 dark:text-indigo-300/80 font-medium mt-1">
+                      تم تفعيل هذه المواضيع تلقائياً بأعلى عدد أسئلة مقترح.
+                    </p>
+                  </div>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {topics.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => toggleTopicFocus(t.id)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
-                      t.isFocused
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                        : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-indigo-300'
-                    }`}
-                  >
-                    <span>{t.name}</span>
-                    {t.isFocused && <Check className="w-3 h-3" />}
-                  </button>
-                ))}
-              </div>
-            </div>
+            )}
 
             {/* Stacked bar chart of topic distribution */}
             <div className="bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
               <p className="text-xs font-bold text-slate-600 dark:text-slate-300 mb-3">
-                توزيع المفاهيم في النموذج المرفوع:
+                توزيع المفاهيم في النموذج المرفوع (أوزان التكرار):
               </p>
               <StackedBarChart topics={topics} />
             </div>
 
-            {/* Topic List (with coverage quality + count + conditional mastery ONLY if prior attempts exist) */}
-            <div className="flex flex-col gap-2.5">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-500 px-1">
-                <span>المفاهيم المدرجة في الاختبار ({topics.filter((t) => t.included).length} من {topics.length})</span>
-                <span>تحديد عدد الأسئلة</span>
+            {/* Inline warning if total requested questions > MAX_QUESTIONS (BUG 2 FIX) */}
+            {isOverMaxQuestions && (
+              <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl p-3 flex items-center gap-2.5 text-xs text-amber-900 dark:text-amber-200 font-bold">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  تم طلب {totalRequestedQuestions} سؤالاً، والحد الأقصى المسموح به هو {MAX_QUESTIONS} سؤالاً. سيتم ضبط عدد الأسئلة إلى {MAX_QUESTIONS} سؤالاً تلقائياً.
+                </span>
               </div>
-              {topics.map((t) => {
-                const conceptPerf = coursePerformance?.conceptAccuracy[t.id] || null;
-                return (
-                  <TopicRow
-                    key={t.id}
-                    topic={t}
-                    masteryInfo={conceptPerf}
-                    onChange={(updated) =>
-                      setTopics((prev) => prev.map((row) => (row.id === updated.id ? updated : row)))
-                    }
-                  />
-                );
-              })}
+            )}
+
+            {/* Collapsible Manual Override Section (BUG 1 FIX: Collapsed by default) */}
+            <div className="bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs">
+              <div className="flex items-center justify-between p-4 bg-slate-50/50 dark:bg-slate-900/30">
+                <div className="flex items-center gap-2">
+                  <SlidersHorizontal className="w-4 h-4 text-slate-500" />
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    المواضيع المفعلة تلقائياً: {includedTopics.length} مفاهيم ({Math.min(totalRequestedQuestions, MAX_QUESTIONS)} أسئلة)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setManualOverrideOpen((v) => !v)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 transition-colors cursor-pointer"
+                >
+                  <span>{manualOverrideOpen ? 'إغلاق التعديل اليدوي' : 'تعديل يدوي'}</span>
+                  {manualOverrideOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+
+              {manualOverrideOpen && (
+                <div className="p-4 border-t border-slate-100 dark:border-slate-700/60 flex flex-col gap-2.5 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-500 px-1 mb-1">
+                    <span>تخصيص المفاهيم وعدد الأسئلة المطلوبة لكل موضوع</span>
+                    <span>العدد</span>
+                  </div>
+                  {topics.map((t) => {
+                    const conceptPerf = coursePerformance?.conceptAccuracy[t.id] || null;
+                    const examPoolCount = uploadedExamQuestions.filter((eq) => eq.topicId === t.id).length;
+                    const isLimitedExam = t.included && t.questionCount > examPoolCount;
+                    return (
+                      <TopicRow
+                        key={t.id}
+                        topic={t}
+                        masteryInfo={conceptPerf}
+                        limitedExamWarning={isLimitedExam}
+                        onChange={(updated) =>
+                          setTopics((prev) => prev.map((row) => (row.id === updated.id ? updated : row)))
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {isGenerating ? (
               <div className="flex flex-col items-center gap-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-2xl p-6">
                 <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
                 <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200">
-                  جاري توليد الأسئلة وصياغة خيارات الإجابة من المقرر...
+                  جاري جلب أسئلة النموذج وصياغة خيارات الإجابة من المقرر...
                 </span>
               </div>
             ) : (
@@ -1511,12 +1807,12 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
                   رجوع
                 </button>
                 <button
-                  disabled={topics.filter((t) => t.included).length === 0}
+                  disabled={includedTopics.length === 0}
                   onClick={handleGenerate}
                   className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold text-xs transition-all cursor-pointer shadow-sm"
                 >
                   <Sparkles className="w-4 h-4" />
-                  ولّد الأسئلة وابدأ الاختبار
+                  ولّد الأسئلة ({Math.min(totalRequestedQuestions, MAX_QUESTIONS)} سؤالاً)
                 </button>
               </div>
             )}
@@ -1565,10 +1861,21 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
                 )}
               </div>
 
-              <div className="text-xs font-bold text-slate-400 hidden sm:block">
-                إجمالي الأسئلة: {questions.length}
+              <div className="text-xs font-bold text-slate-500 hidden sm:block">
+                إجمالي الأسئلة: {questions.length} سؤالاً
               </div>
             </div>
+
+            {/* Notice for topics with limited model exam coverage (BUG 4) */}
+            {limitedCoverageTopics.length > 0 && (
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
+                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold">ملاحظة مصادر الأسئلة: </span>
+                  <span>تغطية النموذج لبعض المواضيع كانت محدودة — تم استكمال العدد بأسئلة مولّدة داخل نطاق المقرر.</span>
+                </div>
+              </div>
+            )}
 
             {/* ── SUB-VIEW A: ACTIVE QUIZ FLOW ── */}
             {quizMode === 'quiz' && questions.length > 0 && (
@@ -1600,7 +1907,8 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getDifficultyColor(q.difficulty)}`}>
                           {getDifficultyLabel(q.difficulty)}
                         </span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getSourceColor(q.source)}`}>
+                        {/* Source Chip with exact Source Type (BUG 4) */}
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getSourceColor(q.sourceType)}`}>
                           {q.sourceLabel}
                         </span>
                       </div>
@@ -1678,7 +1986,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
               </div>
             )}
 
-            {/* ── SUB-VIEW B: REAL PERFORMANCE REPORT (BUG 2) ── */}
+            {/* ── SUB-VIEW B: REAL PERFORMANCE REPORT ── */}
             {quizMode === 'results' && quizPerformanceReport && (
               <div className="bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm space-y-6">
                 <div className="text-center space-y-2">
@@ -1716,7 +2024,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
                   </div>
                 </div>
 
-                {/* Per-topic Accuracy Chart (NOW Legitimate with Real Colors) */}
+                {/* Per-topic Accuracy Chart */}
                 <div className="space-y-3">
                   <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 flex items-center gap-2">
                     <BarChart3 className="w-4 h-4 text-indigo-500" />
@@ -1884,7 +2192,8 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
                               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getDifficultyColor(q.difficulty)}`}>
                                 {getDifficultyLabel(q.difficulty)}
                               </span>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getSourceColor(q.source)}`}>
+                              {/* Source Chip with exact Source Type (BUG 4) */}
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getSourceColor(q.sourceType)}`}>
                                 {q.sourceLabel}
                               </span>
                             </div>
