@@ -16,6 +16,7 @@ import { PracticeTestView } from './components/practice/PracticeTestView';
 import { RateLimitModal } from './components/RateLimitModal';
 import { CourseChatDrawer } from './components/CourseChatDrawer';
 import { ThemeToggleCornerButton } from './components/ThemeToggleCornerButton';
+import { GenerateQuestionsPanel } from './components/GenerateQuestionsPanel';
 import {
   RotateCcw,
   Map as MapIcon,
@@ -27,6 +28,7 @@ import {
   Moon,
   Menu,
   X,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -164,6 +166,13 @@ function AppContent() {
       icon: Code2,
       active: step === 'codeLab',
       onClick: () => setStep('codeLab'),
+    },
+    {
+      key: 'generateQuestions',
+      label: 'ولّد أسئلة',
+      icon: Sparkles,
+      active: step === 'generateQuestions',
+      onClick: () => setStep('generateQuestions'),
     },
   ];
 
@@ -416,6 +425,8 @@ function AppContent() {
         {step === 'codeLab' && <CodeLabPanel />}
         {/* Keyed by course: switching courses starts a fresh setup instead of showing another course's test */}
         {step === 'practice' && <PracticeTestView key={activeCourse?.id ?? 'none'} />}
+        {step === 'generateQuestions' && <GenerateQuestionsPanel />
+        }
       </main>
 
       {/* Footer */}

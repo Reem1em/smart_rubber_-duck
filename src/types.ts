@@ -566,7 +566,8 @@ export type AppStep =
   | 'final'
   | 'roadmap'
   | 'codeLab'
-  | 'practice';
+  | 'practice'
+  | 'generateQuestions';
 
 /* ---- Course-isolated AI tutor chat (اسأل كواكلي) ---- */
 

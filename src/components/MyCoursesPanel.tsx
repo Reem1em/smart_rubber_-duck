@@ -21,6 +21,7 @@ import {
   FolderOpen,
   ChevronDown,
   ChevronUp,
+  Sparkles,
 } from 'lucide-react';
 
 export const MyCoursesPanel: React.FC = () => {
@@ -259,6 +260,14 @@ export const MyCoursesPanel: React.FC = () => {
                         {expandedCourseId === course.id
                           ? <ChevronUp className="w-3 h-3" />
                           : <ChevronDown className="w-3 h-3" />}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setStep('generateQuestions'); }}
+                        title="ولّد أسئلة من نموذج لهذه المادة"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 px-2 py-0.5 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-950/60 transition-colors cursor-pointer"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        <span>ولّد أسئلة</span>
                       </button>
                       <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-bold">
                         <Zap className="w-3 h-3" />
