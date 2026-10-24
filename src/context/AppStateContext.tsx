@@ -132,7 +132,8 @@ interface AppState {
   pendingChatPrompt: string | null;
   consumePendingChatPrompt: () => void;
   /** Opens the drawer, optionally seeded with a concept explanation request. */
-  openCourseChat: (concept?: Concept | null) => void;
+  /** Opens the course chat; `prompt` (or, without it, a concept's "explain" prompt) is sent as the first message. */
+  openCourseChat: (concept?: Concept | null, prompt?: string) => void;
   closeCourseChat: () => void;
 }
 
@@ -426,10 +427,10 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (ownerId && updated) void pushCourseToServer(updated);
   };
 
-  const openCourseChat = (concept?: Concept | null) => {
+  const openCourseChat = (concept?: Concept | null, prompt?: string) => {
     setChatConcept(concept ?? null);
     setPendingChatPrompt(
-      concept ? `اشرح لي مفهوم ${concept.name} ببساطة وبأمثلة عملية` : null
+      prompt?.trim() || (concept ? `اشرح لي مفهوم ${concept.name} ببساطة وبأمثلة عملية` : null)
     );
     setIsChatOpen(true);
   };

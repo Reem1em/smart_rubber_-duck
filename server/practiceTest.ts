@@ -29,6 +29,8 @@ export interface PracticeQuestion {
   reasoning: string;
   explanation: string;
   sourceDocument: string;
+  /** Concept the question tests; groups the score breakdown. */
+  topic: string;
 }
 
 export const MAX_DOCUMENTS = 10;
@@ -114,6 +116,7 @@ export function verifyPracticeQuestions(raw: unknown, limit: number): PracticeQu
       reasoning,
       explanation: str(q.explanation) || reasoning,
       sourceDocument: str(q.source_document),
+      topic: str(q.topic_tag),
     });
   }
 

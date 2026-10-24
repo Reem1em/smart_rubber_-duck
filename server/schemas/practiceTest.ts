@@ -17,6 +17,10 @@ export const practiceTestSchema = {
             type: Type.STRING,
             description: 'The name attribute of the <document> this question is based on.',
           },
+          topic_tag: {
+            type: Type.STRING,
+            description: 'Short Arabic name (2-4 words) of the concept this question tests, as named in the documents.',
+          },
           question: { type: Type.STRING },
           options: {
             type: Type.ARRAY,
@@ -36,8 +40,8 @@ export const practiceTestSchema = {
             description: 'One or two Arabic sentences for the student: why the correct answer is correct.',
           },
         },
-        propertyOrdering: ['id', 'source_document', 'question', 'options', 'step_by_step_reasoning', 'correct_answer', 'explanation'],
-        required: ['id', 'source_document', 'question', 'options', 'step_by_step_reasoning', 'correct_answer', 'explanation'],
+        propertyOrdering: ['id', 'source_document', 'topic_tag', 'question', 'options', 'step_by_step_reasoning', 'correct_answer', 'explanation'],
+        required: ['id', 'source_document', 'topic_tag', 'question', 'options', 'step_by_step_reasoning', 'correct_answer', 'explanation'],
       },
     },
   },

@@ -39,6 +39,7 @@ describe('verifyPracticeQuestions', () => {
     correct_answer: '192.168.1.255',
     explanation: 'كل بتات المضيف واحد.',
     source_document: 'Quiz 1',
+    topic_tag: 'عنونة الشبكات',
   };
 
   it('derives the answer index from correct_answer, tolerating whitespace', () => {
@@ -46,6 +47,7 @@ describe('verifyPracticeQuestions', () => {
     expect(q.correctAnswerIndex).toBe(0);
     expect(q.reasoning).toBe(good.step_by_step_reasoning);
     expect(q.sourceDocument).toBe('Quiz 1');
+    expect(q.topic).toBe('عنونة الشبكات');
   });
 
   it('drops questions whose answer is not one of the options, or that are malformed', () => {

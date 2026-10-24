@@ -12,6 +12,7 @@ import { QuizPanel } from './components/QuizPanel';
 import { FinalDiagnosisPanel } from './components/FinalDiagnosisPanel';
 import { CourseRoadmapPanel } from './components/CourseRoadmapPanel';
 import { CodeLabPanel } from './components/CodeLabPanel';
+import { PracticeTestView } from './components/practice/PracticeTestView';
 import { RateLimitModal } from './components/RateLimitModal';
 import { CourseChatDrawer } from './components/CourseChatDrawer';
 import { ThemeToggleCornerButton } from './components/ThemeToggleCornerButton';
@@ -21,6 +22,7 @@ import {
   MessageCircle,
   Code2,
   Library,
+  BookOpenCheck,
   Sun,
   Moon,
   Menu,
@@ -145,6 +147,14 @@ function AppContent() {
             icon: MessageCircle,
             active: false,
             onClick: () => openCourseChat(),
+          },
+          {
+            key: 'practice',
+            label: 'اختبار تدريبي',
+            title: `اختبار تدريبي من مستندات ${activeCourse.title}`,
+            icon: BookOpenCheck,
+            active: step === 'practice',
+            onClick: () => setStep('practice'),
           },
         ]
       : []),
@@ -404,6 +414,8 @@ function AppContent() {
         {step === 'final' && <FinalDiagnosisPanel />}
         {step === 'roadmap' && <CourseRoadmapPanel />}
         {step === 'codeLab' && <CodeLabPanel />}
+        {/* Keyed by course: switching courses starts a fresh setup instead of showing another course's test */}
+        {step === 'practice' && <PracticeTestView key={activeCourse?.id ?? 'none'} />}
       </main>
 
       {/* Footer */}

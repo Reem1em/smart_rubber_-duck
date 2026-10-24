@@ -233,6 +233,8 @@ export interface PracticeQuestion {
   explanation: string;
   /** Name of the uploaded document the question was built from. */
   sourceDocument: string;
+  /** Concept the question tests (may be empty). */
+  topic: string;
 }
 
 export interface PracticeTest {
@@ -563,7 +565,8 @@ export type AppStep =
   | 'quiz'
   | 'final'
   | 'roadmap'
-  | 'codeLab';
+  | 'codeLab'
+  | 'practice';
 
 /* ---- Course-isolated AI tutor chat (اسأل كواكلي) ---- */
 
