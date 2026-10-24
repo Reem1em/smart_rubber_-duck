@@ -213,6 +213,35 @@ export interface QuizQuestion {
   optionNotes?: string[];
 }
 
+/** 80 = Review, 100 = Mirror of the source exams, 120 = Challenge (multi-concept synthesis). */
+export type PracticeDifficulty = 80 | 100 | 120;
+
+/** One uploaded exam/assignment as plain text; `date` (ISO) lets the newest source win conflicts. */
+export interface PracticeDocument {
+  name: string;
+  text: string;
+  date?: string;
+}
+
+export interface PracticeQuestion {
+  id: number;
+  question: string;
+  options: string[];
+  correctAnswerIndex: number;
+  /** Worked step-by-step solution the answer was derived from. */
+  reasoning: string;
+  explanation: string;
+  /** Name of the uploaded document the question was built from. */
+  sourceDocument: string;
+}
+
+export interface PracticeTest {
+  questions: PracticeQuestion[];
+  /** Fewer questions than requested means some failed answer verification and were dropped. */
+  requestedCount: number;
+  difficulty: PracticeDifficulty;
+}
+
 export interface QuizResult {
   score: number;
   totalQuestions: number;

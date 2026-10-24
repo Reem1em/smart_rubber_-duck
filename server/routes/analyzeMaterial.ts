@@ -2,9 +2,69 @@ import type { Request, Response } from 'express';
 import { ThinkingLevel } from '@google/genai';
 
 import { generateWithRetry, isServerOverloadError } from '../gemini';
+import { mergeChunkModules, toRawModules, type RawModule } from '../materialMerge';
 import { parseModelJsonWithFences } from '../modelJson';
-import { ANALYZE_MATERIAL_SYSTEM_INSTRUCTION, EXTRACTION_INSTRUCTIONS, buildDocumentTextPrompt } from '../prompts/analyzeMaterial';
+import {
+  ANALYZE_MATERIAL_SYSTEM_INSTRUCTION,
+  EXTRACTION_INSTRUCTIONS,
+  buildDocumentChunkPrompt,
+  buildDocumentTextPrompt,
+} from '../prompts/analyzeMaterial';
 import { analyzeMaterialSchema } from '../schemas/analyzeMaterial';
+import { chunkText } from '../textChunker';
+
+const MAX_TEXT_CHARS = 50_000;
+/** Texts at or above this length are split and analyzed chunk by chunk (map-reduce). */
+const CHUNKING_THRESHOLD_CHARS = 15_000;
+/** Parallel model calls per request; keeps a 50k-char document to two waves without tripping rate limits. */
+const CHUNK_CONCURRENCY = 3;
+const ANALYZE_TIMEOUT_MS = 45_000;
+
+/** One structured extraction call; returns the modules the model found in `parts`. */
+async function extractModules(parts: any[]): Promise<RawModule[]> {
+  const response = await generateWithRetry({
+    contents: { parts },
+    config: {
+      systemInstruction: ANALYZE_MATERIAL_SYSTEM_INSTRUCTION,
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      responseMimeType: 'application/json',
+      responseSchema: analyzeMaterialSchema,
+    },
+  }, ANALYZE_TIMEOUT_MS);
+
+  return toRawModules(parseModelJsonWithFences(response.text).modules);
+}
+
+/** Runs `worker` over `items` with at most `limit` in flight, preserving input order in the result. */
+async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await worker(items[i]);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
+/**
+ * Long texts are analyzed per chunk so concepts in the middle of the document get the
+ * model's full attention, then merged. A failed chunk fails the whole request rather
+ * than silently returning a course with a missing chapter.
+ */
+async function extractModulesFromText(text: string): Promise<RawModule[]> {
+  if (text.length < CHUNKING_THRESHOLD_CHARS) {
+    return extractModules([{ text: buildDocumentTextPrompt(text) }]);
+  }
+
+  const chunks = chunkText(text);
+  const perChunk = await mapWithConcurrency(chunks, CHUNK_CONCURRENCY, (chunk) =>
+    extractModules([{ text: buildDocumentChunkPrompt(chunk.text, chunk.index, chunks.length, chunk.carriedHeading) }])
+  );
+  return mergeChunkModules(perChunk);
+}
 
 export const handleAnalyzeMaterial = async (req: Request, res: Response) => {
   try {
@@ -14,41 +74,21 @@ export const handleAnalyzeMaterial = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'لم يتم استلام أي نص أو مستند دراسي صالح للتحليل.' });
     }
 
-    let contentsParts: any[] = [];
+    let modules: RawModule[];
 
     if (base64Data && mimeType) {
-      contentsParts.push({
-        inlineData: {
-          mimeType: mimeType,
-          data: base64Data,
-        },
-      });
-      contentsParts.push({
-        text: EXTRACTION_INSTRUCTIONS,
-      });
+      modules = await extractModules([
+        { inlineData: { mimeType, data: base64Data } },
+        { text: EXTRACTION_INSTRUCTIONS },
+      ]);
     } else {
-      const safeText = typeof textContent === 'string' ? textContent.trim().slice(0, 50000) : '';
+      const safeText = typeof textContent === 'string' ? textContent.trim().slice(0, MAX_TEXT_CHARS) : '';
       if (safeText.length < 15) {
         return res.status(400).json({ error: 'المحتوى الدراسي المرسل قصير جداً. يرجى توفير مادة علمية واضحة للتحليل.' });
       }
-      contentsParts.push({
-        text: buildDocumentTextPrompt(safeText),
-      });
+      modules = await extractModulesFromText(safeText);
     }
 
-    const response = await generateWithRetry({
-      contents: { parts: contentsParts },
-      config: {
-        systemInstruction: ANALYZE_MATERIAL_SYSTEM_INSTRUCTION,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        responseMimeType: 'application/json',
-        responseSchema: analyzeMaterialSchema,
-      },
-    }, 45000);
-
-    const parsed = parseModelJsonWithFences(response.text);
-
-    const modules = Array.isArray(parsed.modules) ? parsed.modules : [];
     if (modules.length === 0) {
       throw new Error('لم يتمكن النموذج من استخراج وحدات المنهج من المستند المرفق.');
     }
@@ -56,13 +96,13 @@ export const handleAnalyzeMaterial = async (req: Request, res: Response) => {
     const allConcepts: any[] = [];
     const markdownLines: string[] = [];
 
-    modules.forEach((mod: any, modIdx: number) => {
+    modules.forEach((mod, modIdx) => {
       const modTitle = (mod.title || `الوحدة ${modIdx + 1}`).trim();
       const formattedTitle = modTitle.startsWith('[') ? modTitle : `[${modTitle}]`;
       markdownLines.push(`## ${modTitle}`);
 
-      const modConcepts = Array.isArray(mod.concepts) ? mod.concepts : [];
-      modConcepts.forEach((c: any, cIdx: number) => {
+      const modConcepts = mod.concepts ?? [];
+      modConcepts.forEach((c, cIdx) => {
         const conceptName = (c.name || `مفهوم ${cIdx + 1}`).trim();
         const coreFocus = (c.coreFocus || c.summary || 'شرح وتطبيق المفهوم').trim();
         markdownLines.push(`* مفهوم ${cIdx + 1}: [${conceptName}] - [${coreFocus}]`);

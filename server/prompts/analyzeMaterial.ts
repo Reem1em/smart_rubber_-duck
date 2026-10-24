@@ -72,3 +72,28 @@ ${safeText}
 
 ${extractionInstructions}`;
 }
+
+/**
+ * Prompt for one excerpt of a long document that was split for map-reduce analysis.
+ * The model only sees this excerpt, so it is told where the excerpt sits and which
+ * section it may be continuing, and must not invent anything outside it.
+ */
+export function buildDocumentChunkPrompt(
+  chunkText: string,
+  chunkIndex: number,
+  totalChunks: number,
+  carriedHeading?: string
+): string {
+  const continuation = carriedHeading
+    ? `This excerpt continues the section titled "${carriedHeading}". Text before the first new heading belongs to that section: use exactly that title for its module.`
+    : 'If the excerpt opens mid-section without a heading, give that module a short descriptive title taken from the excerpt itself.';
+
+  return `# CHUNKED ANALYSIS CONTEXT:
+You are analyzing excerpt ${chunkIndex + 1} of ${totalChunks} of a single long document. Other excerpts are analyzed separately and merged afterwards.
+- Extract modules and concepts ONLY from the text inside <document_content> below. Do not summarize, guess, or reference content from other excerpts.
+- Cover this excerpt completely from its first line to its last line, including material in its middle.
+- Copy module titles exactly as written in the document so they can be matched across excerpts.
+- ${continuation}
+
+${buildDocumentTextPrompt(chunkText)}`;
+}

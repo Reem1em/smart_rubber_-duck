@@ -13,4 +13,5 @@ export { generateCodeLab } from './codeLab';
 export { generateDevChallenge, evaluateDevSubmission, evaluateCustomLab } from './devLab';
 export { generateBugChallenge, evaluateBugChallenge } from './bugLab';
 export { discussQuizAnswer } from './quizEval';
+export { generatePracticeTest } from './practiceTest';
 export { extractSlides, failedSlideSource } from './extractSlides';
