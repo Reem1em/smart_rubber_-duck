@@ -9,12 +9,12 @@ export const MAX_CONTEXT_CHARS = 60_000;
  * uploaded file can't end `<uploaded_context>` early and append instructions after it.
  * Everything else (code, `a < b`, IP addresses) stays byte-for-byte as uploaded.
  */
-function neutralizeWrapperTags(text: string): string {
-  return text.replace(/<(\/?)\s*(uploaded_context|document|strict_rules|output_constraints|execution_context|system_role)\b/gi, '&lt;$1$2');
+export function neutralizeWrapperTags(text: string): string {
+  return text.replace(/<(\/?)\s*(uploaded_context|document|exam_document|course_topics|strict_rules|output_constraints|execution_context|system_role)\b/gi, '&lt;$1$2');
 }
 
 /** Attribute-safe single line for document metadata. */
-const attr = (value: string): string => value.replace(/["<>\s]+/g, ' ').trim();
+export const attr = (value: string): string => value.replace(/["<>\s]+/g, ' ').trim();
 
 /**
  * Splits `budget` characters fairly: short documents keep their full text and hand
@@ -74,7 +74,7 @@ export function aggregateDocuments(documents: PracticeDocument[], budget = MAX_C
 }
 
 /** `{difficulty_level}` as the tier label the rules in Rule 5 refer to. */
-const DIFFICULTY_LABEL: Record<PracticeDifficulty, string> = {
+export const DIFFICULTY_LABEL: Record<PracticeDifficulty, string> = {
   80: '80% (Review)',
   100: '100% (Mirror)',
   120: '120% (Challenge)',

@@ -20,7 +20,7 @@ export interface PracticeDocumentOption {
 }
 
 /** Plain text of one extracted file: every slide's heading, text and visual description, in order. */
-function sourceText(source: SlideSource): string {
+export function sourceText(source: SlideSource): string {
   return source.chunks
     .map((c) => [c.part === 1 ? c.heading : '', c.text, c.visual ?? ''].filter((s) => s.trim()).join('\n'))
     .filter(Boolean)

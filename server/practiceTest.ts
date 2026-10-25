@@ -42,7 +42,7 @@ const MAX_NAME = 120;
 const MAX_SUBJECT_ID = 128;
 const OPTION_COUNT = 4;
 
-const DIFFICULTIES: readonly PracticeDifficulty[] = [80, 100, 120];
+export const DIFFICULTIES: readonly PracticeDifficulty[] = [80, 100, 120];
 
 const oneLine = (raw: unknown, max: number): string =>
   typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim().slice(0, max) : '';
@@ -80,7 +80,7 @@ export function parsePracticeTestRequest(body: unknown): { request: PracticeTest
 }
 
 /** Whitespace- and Unicode-form-insensitive comparison key for an option. */
-const optionKey = (s: string): string => s.normalize('NFKC').replace(/\s+/g, ' ').trim();
+export const optionKey = (s: string): string => s.normalize('NFKC').replace(/\s+/g, ' ').trim();
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 
