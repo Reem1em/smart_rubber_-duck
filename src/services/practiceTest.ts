@@ -1,8 +1,8 @@
 /**
- * Pure helpers for the practice-test workspace: which course documents can feed a test,
- * turning the student's selection into document text, and scoring a finished attempt.
+ * Pure helpers for question generation: which course documents have extracted text, and
+ * turning them into the document text the backend expects.
  */
-import type { PracticeDocument, PracticeQuestion, SavedCourse, SlideSource } from '../types';
+import type { PracticeDocument, SavedCourse, SlideSource } from '../types';
 
 /** A course document the student can tick in the setup panel. */
 export interface PracticeDocumentOption {
@@ -84,46 +84,4 @@ export function resolvePracticeDocuments(course: SavedCourse, documentIds: strin
   }
 
   return documents;
-}
-
-export interface TopicScore {
-  topic: string;
-  correct: number;
-  total: number;
-}
-
-export interface PracticeScore {
-  correct: number;
-  answered: number;
-  total: number;
-  /** Rounded 0-100. */
-  percent: number;
-  /** Weakest topics first, so the review starts where the student struggled. */
-  byTopic: TopicScore[];
-}
-
-/** Topic label for questions the model didn't tag. */
-export const UNTAGGED_TOPIC = 'عام';
-
-/** `answers[i]` is the chosen option index for `questions[i]`, or null when skipped. */
-export function scorePracticeTest(questions: PracticeQuestion[], answers: Array<number | null>): PracticeScore {
-  const topics = new Map<string, TopicScore>();
-  let correct = 0;
-  let answered = 0;
-
-  questions.forEach((q, i) => {
-    const choice = answers[i] ?? null;
-    const isCorrect = choice === q.correctAnswerIndex;
-    if (choice !== null) answered++;
-    if (isCorrect) correct++;
-    const topic = q.topic.trim() || UNTAGGED_TOPIC;
-    const entry = topics.get(topic) ?? { topic, correct: 0, total: 0 };
-    entry.total++;
-    if (isCorrect) entry.correct++;
-    topics.set(topic, entry);
-  });
-
-  const byTopic = [...topics.values()].sort((a, b) => a.correct / a.total - b.correct / b.total);
-  const total = questions.length;
-  return { correct, answered, total, percent: total ? Math.round((correct / total) * 100) : 0, byTopic };
 }

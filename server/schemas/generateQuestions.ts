@@ -40,12 +40,13 @@ export const generatedQuestionsSchema = {
           topic_id: { type: Type.STRING, description: 'id of the requested topic this question tests.' },
           source: {
             type: Type.STRING,
-            enum: ['exam', 'course'],
-            description: "'exam' if adapted from a specific question in <exam_document>, otherwise 'course'.",
+            enum: ['exam', 'mixed', 'course'],
+            description:
+              "'exam' if adapted from one question in <exam_document>; 'mixed' if that exam question is combined with facts from <uploaded_context>; otherwise 'course'.",
           },
           exam_excerpt: {
             type: Type.STRING,
-            description: "For source 'exam': the original exam question copied verbatim. Empty string for 'course'.",
+            description: "For source 'exam' or 'mixed': the original exam question copied verbatim. Empty string for 'course'.",
           },
           question: { type: Type.STRING },
           options: {

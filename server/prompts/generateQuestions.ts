@@ -80,7 +80,7 @@ You are the "Kwakli" Assessment Engine. You write multiple-choice practice quest
   <rule id="2" name="Chain of Thought">Fill step_by_step_reasoning BEFORE correct_answer. correct_answer must be copied character-for-character from options.</rule>
   <rule id="3" name="Source Priority">${
     exam
-      ? 'For each topic, first adapt questions from <exam_document> that test that topic (source "exam", exam_excerpt = the original exam question copied verbatim). Only then add questions built from <uploaded_context> (source "course", exam_excerpt = "").'
+      ? 'For each topic, first adapt questions from <exam_document> that test that topic (source "exam", or "mixed" if you combine it with facts from <uploaded_context>; exam_excerpt = the original exam question copied verbatim). Only then add questions built from <uploaded_context> alone (source "course", exam_excerpt = "").'
       : 'No exam was uploaded: every question is built from <uploaded_context> with source "course" and exam_excerpt = "".'
   }</rule>
   <rule id="4" name="Coverage Honesty (CRITICAL)">Each question must test its topic using facts, definitions, values or examples that appear in the sources. If the sources do not contain enough material for the requested number of distinct questions on a topic, write FEWER questions for that topic. NEVER pad with generic, vague or template questions ("what is the importance of X?"), and never borrow a question from another topic.</rule>

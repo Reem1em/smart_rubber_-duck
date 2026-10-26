@@ -1,4 +1,3 @@
-import { LATEX_DISPLAY_RULES } from '../stem';
 import type { PracticeDifficulty, PracticeDocument } from '../practiceTest';
 
 /** Total characters of document text sent to the model, shared across all documents. */
@@ -79,70 +78,3 @@ export const DIFFICULTY_LABEL: Record<PracticeDifficulty, string> = {
   100: '100% (Mirror)',
   120: '120% (Challenge)',
 };
-
-/** The Kwakli Assessment Engine prompt for a practice test built from several uploaded documents. */
-export function buildPracticeTestPrompt({
-  subjectId,
-  difficulty,
-  questionCount,
-  documents,
-  isStem,
-}: {
-  subjectId: string;
-  difficulty: PracticeDifficulty;
-  questionCount: number;
-  documents: PracticeDocument[];
-  isStem: boolean;
-}): string {
-  const formatting = isStem
-    ? `
-<formatting_rules>
-${LATEX_DISPLAY_RULES}
-</formatting_rules>
-`
-    : '';
-
-  return `<system_role>
-You are the "Kwakli" Assessment Engine, an elite AI specialized in educational evaluation. Your task is to analyze multiple uploaded academic documents (exams, assignments) and generate a logically flawless, zero-hallucination practice test.
-</system_role>
-
-<strict_rules>
-  <rule id="1" name="Language & Terminology">
-    ALL generated content (questions, options, explanations) MUST be in ARABIC. However, technical terms, code snippets, or standard mathematical variables (e.g., IP addresses, equations, variables like x, y) MUST remain in their original language (usually English) exactly as they appear in the source documents. Do not over-translate.
-  </rule>
-
-  <rule id="2" name="Chain of Thought Execution (CRITICAL)">
-    To completely eliminate mathematical or logical hallucinations, you MUST populate the \`step_by_step_reasoning\` field BEFORE outputting the \`correct_answer\`. Walk through the calculation or logic explicitly. Only after proving the logic can you state the final answer.
-  </rule>
-
-  <rule id="3" name="Context Collision & Source Fidelity">
-    If uploaded documents contain conflicting definitions or values (e.g., Quiz 1 uses g=9.8, Final uses g=10), prioritize the logic from the most recent or comprehensive document. NEVER invent concepts outside the \`<uploaded_context>\`.
-  </rule>
-
-  <rule id="4" name="Logical Variable Mutation">
-    When generating new questions by modifying existing ones, keep variable changes logically sound.
-    - Physics/Math: Keep values physically possible.
-    - Networking/CS: IP addresses must remain valid IPv4/IPv6 formats. Code syntax must remain functional.
-  </rule>
-
-  <rule id="5" name="Difficulty Scaling">
-    - 80% (Review): Single-step problems, direct recall of definitions.
-    - 100% (Mirror): Exact logical complexity of the source document.
-    - 120% (Challenge): Multi-step synthesis requiring combination of two concepts from the source text.
-  </rule>
-</strict_rules>
-${formatting}
-<output_constraints>
-  Return ONLY a valid, raw JSON object matching the provided schema. Do not wrap it in \`\`\`json blocks. Do not add conversational text before or after the JSON.
-</output_constraints>
-
-<execution_context>
-  <subject_id>${attr(subjectId)}</subject_id>
-  <target_difficulty>${DIFFICULTY_LABEL[difficulty]}</target_difficulty>
-  <target_questions_count>${questionCount}</target_questions_count>
-</execution_context>
-
-<uploaded_context>
-${aggregateDocuments(documents)}
-</uploaded_context>`;
-}

@@ -33,17 +33,21 @@ import { Concept, ExamAttempt, PracticeDifficulty, QuestionAttempt, SavedCourse 
 import {
   MAX_TOPIC_QUESTIONS,
   MAX_TOTAL_QUESTIONS,
-  SUPPORTED_EXAM_ACCEPT,
+  PROVENANCE_LABEL,
   analyzeExam,
   courseDocuments,
-  examFromPastedText,
   generateQuestions,
   readExamFile,
+  readPastedExam,
+  verifiedProvenance,
   type ExamAnalysis,
   type ExamText,
   type GeneratedQuestion,
+  type QuestionProvenance,
   type TopicCoverage,
 } from '../services/api/generateQuestions';
+import { SUPPORTED_UPLOAD_ACCEPT, SUPPORTED_UPLOAD_LABEL } from '../utils/uploadFile';
+import { MathView } from './MathView';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS & TYPES
@@ -53,7 +57,6 @@ const MAX_QUESTIONS = MAX_TOTAL_QUESTIONS;
 
 type GenStep = 'upload' | 'difficulty' | 'topics' | 'results';
 type Difficulty = '100' | '80' | '120';
-type QuestionSource = 'exam' | 'course';
 type QuestionDifficulty = 'easy' | 'medium' | 'advanced';
 
 interface TopicRowData {
@@ -78,9 +81,13 @@ interface GeneratedQuizQuestion {
   correctIndex: number;
   explanation: string;
   difficulty: QuestionDifficulty;
-  source: QuestionSource;
+  /** Verified against the course's stored exam files (see verifiedProvenance). */
+  source: QuestionProvenance;
+  sourceFileId?: string;
   sourceLabel: string;
   sourceType: 'exam' | 'generated';
+  /** Worked solution the answer was derived from. */
+  reasoning: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -180,7 +187,8 @@ function allocateCounts(rows: TopicRowData[], max: number): Map<string, number> 
 }
 
 /** Server question → the shape the quiz views render. */
-function toQuizQuestion(q: GeneratedQuestion, concept: Concept | undefined): GeneratedQuizQuestion {
+function toQuizQuestion(q: GeneratedQuestion, concept: Concept | undefined, course: SavedCourse): GeneratedQuizQuestion {
+  const source = verifiedProvenance(q, course);
   return {
     id: `q-${q.topicId}-${q.id}`,
     conceptId: q.topicId,
@@ -190,9 +198,11 @@ function toQuizQuestion(q: GeneratedQuestion, concept: Concept | undefined): Gen
     correctIndex: q.correctAnswerIndex,
     explanation: q.explanation,
     difficulty: toQuestionDifficulty(q.difficulty),
-    source: q.source,
-    sourceLabel: q.source === 'exam' ? 'مقتبس من نموذجك' : 'من محتوى المقرر',
-    sourceType: q.source === 'exam' ? 'exam' : 'generated',
+    source,
+    ...(source !== 'generated' ? { sourceFileId: q.sourceFileId } : {}),
+    sourceLabel: PROVENANCE_LABEL[source],
+    sourceType: source === 'generated' ? 'generated' : 'exam',
+    reasoning: q.reasoning,
   };
 }
 
@@ -775,6 +785,9 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
     addAttempt,
     setStep,
     showRateLimitModal,
+    saveExamToCourse,
+    extractingSlideSourceIds,
+    openCourseChat,
   } = useAppState();
 
   const activeCourseId = preselectedCourseId || selectedCourseId;
@@ -800,6 +813,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStage, setAnalysisStage] = useState<'reading' | 'mapping' | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [examStoreWarning, setExamStoreWarning] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // The exam actually read from the student's file (null = proceeding without an exam, by explicit choice)
@@ -844,6 +858,20 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
     () => (selectedCourse ? courseDocuments(selectedCourse).length > 0 : false),
     [selectedCourse]
   );
+  const courseTextStatus = useMemo(() => {
+    if (!selectedCourse || hasCourseText) return null;
+    const ids = [selectedCourse.id, ...(selectedCourse.files ?? []).filter((f) => f.kind !== 'exam').map((f) => f.id)];
+    if (ids.some((id) => extractingSlideSourceIds.includes(id))) {
+      return 'جاري استخراج نص ملفات المقرر الآن — انتظر حتى ينتهي ثم تابع.';
+    }
+    const failed = (selectedCourse.slideSources ?? []).filter(
+      (s) => ids.includes(s.sourceId) && (s.status === 'failed' || s.status === 'unsupported')
+    );
+    if (failed.length > 0) {
+      return `تعذر استخراج نص ملفات المقرر: ${failed.map((s) => `«${s.fileName}»: ${s.error ?? 'سبب غير معروف'}`).join(' — ')}. أعد معالجتها من صفحة المادة.`;
+    }
+    return 'لا يوجد نص مستخرج من ملفات هذا المقرر بعد. أضف ملفاته أو أعد معالجتها من صفحة المادة.';
+  }, [selectedCourse, hasCourseText, extractingSlideSourceIds]);
 
   // Topics the analyzed exam asks about most (empty without an exam: no focus can be claimed)
   const top3Topics = useMemo(() => {
@@ -879,6 +907,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
     setIsAnalyzing(false);
     setAnalysisStage(null);
     setUploadError(null);
+    setExamStoreWarning(null);
     setExam(null);
     setExamAnalysis(null);
     setTopics(selectedCourse ? initialTopicRows(selectedCourse.concepts) : []);
@@ -922,14 +951,35 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
     if (!selectedCourse) return;
     setIsAnalyzing(true);
     setUploadError(null);
+    setExamStoreWarning(null);
     setExam(null);
     setExamAnalysis(null);
     try {
       setAnalysisStage('reading');
       const text =
         pasteMode || !uploadedFile
-          ? examFromPastedText(pastedText)
+          ? await readPastedExam(pastedText, selectedCourse.concepts)
           : await readExamFile(uploadedFile, selectedCourse.concepts);
+
+      // Store the parsed exam on the course: questions may only cite it by this real file id.
+      const stored = await saveExamToCourse(
+        selectedCourse.id,
+        {
+          id: text.fileId,
+          fileName: text.name,
+          fileSize: text.size,
+          fileType: text.mimeType,
+          uploadedAt: Date.now(),
+          conceptsCount: 0,
+          status: 'ready',
+          kind: 'exam',
+        },
+        text.source
+      );
+      if (!stored) {
+        setExamStoreWarning('تعذر حفظ النموذج في المادة، لذا ستظهر كل الأسئلة بوصف «مولّد من ملفات المقرر».');
+      }
+
       setAnalysisStage('mapping');
       const analysis = await analyzeExam(selectedCourse, text);
       setExam(text);
@@ -949,6 +999,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
   const handleSkipExam = () => {
     if (!selectedCourse) return;
     setUploadError(null);
+    setExamStoreWarning(null);
     setExam(null);
     setExamAnalysis(null);
     setTopics(initialTopicRows(selectedCourse.concepts));
@@ -985,7 +1036,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
         }),
       });
 
-      setQuestions(result.questions.map((q) => toQuizQuestion(q, conceptById.get(q.topicId))));
+      setQuestions(result.questions.map((q) => toQuizQuestion(q, conceptById.get(q.topicId), selectedCourse)));
       setCoverage(result.coverage);
       setUserAnswers({});
       setCurrentQuestionIndex(0);
@@ -1111,6 +1162,15 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
         }))
       );
     }
+  };
+
+  const handleAskKwakli = (q: GeneratedQuizQuestion) => {
+    const concept = selectedCourse?.concepts.find((c) => c.id === q.conceptId) ?? null;
+    const excerpt = q.text.length > 400 ? `${q.text.slice(0, 400)}…` : q.text;
+    openCourseChat(
+      concept,
+      `أواجه صعوبة في مفهوم "${q.conceptName}". هذا سؤال من اختباري التدريبي:\n\n${excerpt}\n\nاشرح لي الفكرة خطوة بخطوة بمثال مختلف.`
+    );
   };
 
   const handleSaveExam = (name: string) => {
@@ -1256,7 +1316,8 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept={SUPPORTED_EXAM_ACCEPT}
+                  accept={SUPPORTED_UPLOAD_ACCEPT}
+                  data-testid="exam-upload-input"
                   onChange={handleFileInput}
                   className="hidden"
                 />
@@ -1269,7 +1330,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
                       {uploadedFile ? uploadedFile.name : 'اسحب نموذج الاختبار هنا أو اضغط للاختيار'}
                     </p>
                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                      يدعم PDF، صور (PNG/JPG)، أو ملف نصي (TXT/MD)
+                      يدعم {SUPPORTED_UPLOAD_LABEL}
                     </p>
                   </div>
                 </div>
@@ -1332,9 +1393,9 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
                 >
                   المتابعة بدون نموذج (أسئلة من ملفات المقرر فقط)
                 </button>
-                {!hasCourseText && selectedCourse && (
-                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                    غير متاح: لا يوجد نص مستخرج من ملفات هذا المقرر بعد.
+                {courseTextStatus && (
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 text-center max-w-md">
+                    غير متاح: {courseTextStatus}
                   </span>
                 )}
               </div>
@@ -1458,6 +1519,11 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
                     عُثر على {examAnalysis.examQuestionCount} سؤالاً في النموذج
                     {examAnalysis.unmappedCount > 0 && `، منها ${examAnalysis.unmappedCount} لا تطابق أي مفهوم في المقرر ولم تُحتسب`}
                     . الأعداد أدناه تعكس تركيز النموذج فقط، وليست تقييماً لمستواك.
+                  </p>
+                )}
+                {examStoreWarning && (
+                  <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 mt-1 leading-relaxed">
+                    ⚠️ {examStoreWarning}
                   </p>
                 )}
                 {exam?.warning && (
@@ -1709,7 +1775,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
                       </div>
 
                       <h3 className="text-sm sm:text-base font-black text-slate-800 dark:text-slate-100 leading-relaxed">
-                        {q.text}
+                        <MathView content={q.text} />
                       </h3>
 
                       {/* Options */}
@@ -1736,7 +1802,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
                                 }`}>
                                   {['أ', 'ب', 'ج', 'د'][optIdx] || optIdx + 1}
                                 </span>
-                                <span className="leading-relaxed">{opt}</span>
+                                <span className="leading-relaxed flex-1 min-w-0"><MathView content={opt} /></span>
                               </div>
                               {isSelected && <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />}
                             </button>
@@ -2005,7 +2071,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
                           </div>
 
                           <p className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 leading-relaxed">
-                            {q.text}
+                            <MathView content={q.text} />
                           </p>
 
                           <div className="space-y-1.5 pt-1">
@@ -2023,7 +2089,7 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
                                       : 'border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 text-slate-600 dark:text-slate-400'
                                   }`}
                                 >
-                                  <span>{['أ', 'ب', 'ج', 'د'][optIdx] || optIdx + 1}. {opt}</span>
+                                  <span className="flex items-start gap-1">{['أ', 'ب', 'ج', 'د'][optIdx] || optIdx + 1}. <MathView content={opt} asInline /></span>
                                   {isCorrectOpt && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
                                 </div>
                               );
@@ -2032,9 +2098,26 @@ export const GenerateQuestionsPanel: React.FC<GenerateQuestionsPanelProps> = ({
 
                           {q.explanation && (
                             <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs text-slate-600 dark:text-slate-300 font-medium">
-                              💡 <strong>التفسير:</strong> {q.explanation}
+                              💡 <strong>التفسير:</strong> <MathView content={q.explanation} asInline />
                             </div>
                           )}
+
+                          {q.reasoning && q.reasoning !== q.explanation && (
+                            <details className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs text-slate-600 dark:text-slate-300">
+                              <summary className="font-bold cursor-pointer">الحل خطوة بخطوة</summary>
+                              <div className="mt-2">
+                                <MathView content={q.reasoning} />
+                              </div>
+                            </details>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleAskKwakli(q)}
+                            className="self-start text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                          >
+                            اسأل كواكلي عن هذا السؤال
+                          </button>
                         </div>
                       );
                     })}

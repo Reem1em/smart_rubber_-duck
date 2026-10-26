@@ -5,6 +5,7 @@ import { generateWithRetry, isQuotaOrRateLimitError } from '../gemini';
 import { buildSystemPrompt } from '../utils/loadAgent';
 import { buildExtractSlidesPrompt } from '../prompts/extractSlides';
 import { mergeSlides, parseTranscript } from '../slides/parseTranscript';
+import { MSG_OFFICE_UNSUPPORTED, docxToText, isDocx, isUnreadableOffice } from '../docText';
 import { buildSlideChunks, sectionPlainText, type ParsedSlide } from '../../src/services/slides/chunking';
 
 const SYSTEM_PROMPT = buildSystemPrompt('01_ANALYZER.md');
@@ -12,23 +13,22 @@ const SYSTEM_PROMPT = buildSystemPrompt('01_ANALYZER.md');
 /** Continuation calls per file when a transcript hits the model's output limit. */
 const MAX_CALLS = 4;
 const MAX_OUTPUT_TOKENS = 32768;
-/** Whole-request model budget; the client waits up to 300s for this background call. */
-const TOTAL_BUDGET_MS = 240000;
+/** Whole-request model budget: stays under the 170s API watchdog so a long file returns `partial`, not a 503. */
+const TOTAL_BUDGET_MS = 150000;
 const PER_CALL_TIMEOUT_MS = 120000;
 /** Storage guard: text beyond this is not stored and the source is marked partial. */
 const MAX_SOURCE_CHARS = 3_000_000;
 const MAX_TEXT_INPUT_CHARS = 2_000_000;
 
-const UNSUPPORTED_EXT = /\.(docx?|pptx?)$/i;
-const UNSUPPORTED_MIME = /(msword|officedocument|powerpoint|ms-excel)/i;
-
-const MSG_UNSUPPORTED = 'هذا النوع من الملفات لا يمكن قراءة نصه حالياً. صدّر الملف بصيغة PDF ثم ارفعه من جديد.';
 const MSG_TRUNCATED = (n: number) =>
   `تم استخراج نص الشرائح حتى الشريحة ${n} فقط؛ بقية الملف لم تُستخرج بعد. أعد المعالجة لاحقاً لإكمالها.`;
 const MSG_UNREADABLE = (slides: number[]) =>
   `بعض الأجزاء غير مقروءة في الشرائح: ${slides.join('، ')}؛ لم يُخمَّن محتواها.`;
 const MSG_FAILED = 'تعذّر استخراج نص الشرائح الآن. يمكنك إعادة المعالجة لاحقاً.';
-const MSG_EMPTY = 'لم يُعثر على نص قابل للقراءة في الملف.';
+const MSG_EMPTY =
+  'تمت قراءة الملف كاملاً ولم يُعثر فيه على نص قابل للقراءة. إذا كان صوراً ممسوحة بجودة منخفضة فارفع نسخة أوضح أو ملفاً نصياً.';
+const MSG_UNSUPPORTED_MIME = (mime: string) =>
+  `صيغة الملف (${mime || 'غير معروفة'}) غير مدعومة لاستخراج النص. الصيغ المدعومة: PDF، صور PNG/JPG، ‎.docx، ‎.txt.`;
 
 interface ConceptRef {
   id: string;
@@ -116,16 +116,24 @@ export const handleExtractSlides = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'معرّف الملف واسمه مطلوبان.' });
   }
 
-  if (UNSUPPORTED_EXT.test(fileName) || (typeof mimeType === 'string' && UNSUPPORTED_MIME.test(mimeType))) {
-    return res.json(failedSource(sourceId, fileName, MSG_UNSUPPORTED, 'unsupported'));
+  if (isUnreadableOffice(fileName, mimeType)) {
+    return res.json(failedSource(sourceId, fileName, MSG_OFFICE_UNSUPPORTED, 'unsupported'));
   }
 
   const concepts = readConcepts(req.body?.concepts);
 
+  // Word files: converted to text here, then sectioned like any text upload.
+  let plainText = typeof textContent === 'string' && !base64Data ? textContent : '';
+  if (typeof base64Data === 'string' && base64Data && isDocx(fileName, mimeType)) {
+    const docx = await docxToText(base64Data);
+    if ('error' in docx) return res.json(failedSource(sourceId, fileName, docx.error));
+    plainText = docx.text;
+  }
+
   // Plain-text sources: deterministic, no model call.
-  if (typeof textContent === 'string' && textContent.trim() && !base64Data) {
-    const slides = sectionPlainText(textContent.slice(0, MAX_TEXT_INPUT_CHARS), concepts);
-    const result = finalizeSource(sourceId, fileName, slides, textContent.length <= MAX_TEXT_INPUT_CHARS);
+  if (plainText.trim()) {
+    const slides = sectionPlainText(plainText.slice(0, MAX_TEXT_INPUT_CHARS), concepts);
+    const result = finalizeSource(sourceId, fileName, slides, plainText.length <= MAX_TEXT_INPUT_CHARS);
     return res.json(result);
   }
 
@@ -133,7 +141,7 @@ export const handleExtractSlides = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'لم يتم استلام ملف صالح لاستخراج الشرائح.' });
   }
   if (!(mimeType === 'application/pdf' || mimeType.startsWith('image/'))) {
-    return res.json(failedSource(sourceId, fileName, MSG_UNSUPPORTED, 'unsupported'));
+    return res.json(failedSource(sourceId, fileName, MSG_UNSUPPORTED_MIME(mimeType), 'unsupported'));
   }
 
   const allowed = new Set(concepts.map((c) => c.id));

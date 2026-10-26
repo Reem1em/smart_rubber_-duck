@@ -162,19 +162,41 @@ describe('verifyGeneratedQuestions', () => {
     expect(coverage[0]).toEqual({ topicId: 'subnet', requested: 2, delivered: 2, fromExam: 0 });
   });
 
-  it("keeps the 'exam' label only when the excerpt is really in the exam", () => {
+  const storedExam = { ...exam, fileId: 'exam-file-1' };
+  const realExcerpt = 'Find the network address of 192.168.1.10/24.';
+
+  it('keeps exam provenance only when the excerpt is really in the stored exam', () => {
     const raw = [
-      q({ source: 'exam', exam_excerpt: 'Find the network address of 192.168.1.10/24.' }),
+      q({ source: 'exam', exam_excerpt: realExcerpt }),
       q({ source: 'exam', exam_excerpt: 'سؤال من النموذج المرفوع عن الأساس النظري', question: 'سؤال مختلف تماماً عن العناوين' }),
+      q({ source: 'mixed', exam_excerpt: realExcerpt, question: 'سؤال يدمج النموذج مع المحاضرة' }),
     ];
-    const { questions, coverage } = verifyGeneratedQuestions(raw, [topic('subnet', 2)], exam);
-    expect(questions.map((x) => x.source)).toEqual(['exam', 'course']);
-    expect(coverage[0].fromExam).toBe(1);
+    const { questions, coverage } = verifyGeneratedQuestions(raw, [topic('subnet', 3)], storedExam);
+    expect(questions.map((x) => [x.source, x.sourceFileId])).toEqual([
+      ['uploaded_exam', 'exam-file-1'],
+      ['generated', undefined],
+      ['mixed', 'exam-file-1'],
+    ]);
+    expect(coverage[0].fromExam).toBe(2);
   });
 
-  it("never labels a question 'exam' when no exam was uploaded", () => {
-    const raw = [q({ source: 'exam', exam_excerpt: 'Find the network address of 192.168.1.10/24.' })];
-    expect(verifyGeneratedQuestions(raw, [topic('subnet', 1)], null).questions[0].source).toBe('course');
+  it('no exam uploaded → never an exam label', () => {
+    const raw = [q({ source: 'exam', exam_excerpt: realExcerpt })];
+    const [question] = verifyGeneratedQuestions(raw, [topic('subnet', 1)], null).questions;
+    expect(question.source).toBe('generated');
+    expect(question).not.toHaveProperty('sourceFileId');
+  });
+
+  it('exam text without a stored file id → never an exam label', () => {
+    const raw = [q({ source: 'exam', exam_excerpt: realExcerpt })];
+    expect(verifyGeneratedQuestions(raw, [topic('subnet', 1)], exam).questions[0].source).toBe('generated');
+  });
+});
+
+describe('parseGenerateQuestionsRequest — exam file id', () => {
+  it('keeps the stored exam file id for provenance', () => {
+    const r = parseGenerateQuestionsRequest({ ...base, exam: { ...exam, fileId: 'abc' } });
+    expect('request' in r && r.request.exam?.fileId).toBe('abc');
   });
 });
 

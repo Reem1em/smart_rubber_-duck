@@ -44,6 +44,11 @@ export interface CourseFile {
   conceptsCount: number;
   /** Status of extraction for this file. */
   status: 'processing' | 'ready' | 'error';
+  /**
+   * 'exam' = an exam/assignment model uploaded from "ولّد أسئلة"; its text is a question source,
+   * not course material. Missing on files saved before this field existed: treated as 'material'.
+   */
+  kind?: 'material' | 'exam';
 }
 
 /** A course workspace cached locally in IndexedDB, keyed by content hash. */
@@ -221,27 +226,6 @@ export interface PracticeDocument {
   name: string;
   text: string;
   date?: string;
-}
-
-export interface PracticeQuestion {
-  id: number;
-  question: string;
-  options: string[];
-  correctAnswerIndex: number;
-  /** Worked step-by-step solution the answer was derived from. */
-  reasoning: string;
-  explanation: string;
-  /** Name of the uploaded document the question was built from. */
-  sourceDocument: string;
-  /** Concept the question tests (may be empty). */
-  topic: string;
-}
-
-export interface PracticeTest {
-  questions: PracticeQuestion[];
-  /** Fewer questions than requested means some failed answer verification and were dropped. */
-  requestedCount: number;
-  difficulty: PracticeDifficulty;
 }
 
 export interface QuizResult {

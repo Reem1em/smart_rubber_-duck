@@ -17,6 +17,7 @@ import {
   WorkspaceExport,
   ExamAttempt,
   StudentPerformance,
+  SlideSource,
 } from '../types';
 import * as courseStore from '../services/courseStore';
 import { extractSlides, failedSlideSource } from '../services/ai';
@@ -99,6 +100,11 @@ interface AppState {
   ) => Promise<{ duplicate: boolean }>;
   /** Prunes a chapter file and all its concepts from the active course. */
   removeChapterFromCourse: (courseId: string, fileId: string) => Promise<void>;
+  /**
+   * Stores an exam model as a course file (kind 'exam', no concepts) together with its extracted
+   * text, so questions can cite it by a real file id. Resolves false if it could not be stored.
+   */
+  saveExamToCourse: (courseId: string, fileRecord: CourseFile, source: SlideSource) => Promise<boolean>;
   /** Source ids whose slide text is being extracted right now. */
   extractingSlideSourceIds: string[];
   /**
@@ -404,6 +410,19 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return { duplicate: result.duplicate };
   };
 
+  const saveExamToCourse = async (courseId: string, fileRecord: CourseFile, source: SlideSource): Promise<boolean> => {
+    try {
+      await courseStore.addFileToCourse(courseId, { ...fileRecord, kind: 'exam' }, []);
+      const updated = await courseStore.setSlideSource(courseId, source);
+      await refreshCourses();
+      if (ownerId && updated) void pushCourseToServer(updated);
+      return !!updated;
+    } catch (err) {
+      console.warn('تعذر حفظ نموذج الاختبار في المادة:', err);
+      return false;
+    }
+  };
+
   const removeChapterFromCourse = async (courseId: string, fileId: string): Promise<void> => {
     const updated = await courseStore.removeFileFromCourse(courseId, fileId);
     await refreshCourses();
@@ -684,6 +703,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         exportWorkspace,
         importWorkspace,
         addChapterToCourse,
+        saveExamToCourse,
         removeChapterFromCourse,
         extractingSlideSourceIds,
         extractCourseSlides,

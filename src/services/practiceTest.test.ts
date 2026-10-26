@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { PracticeQuestion, SavedCourse, SlideSource } from '../types';
-import { listPracticeDocuments, resolvePracticeDocuments, scorePracticeTest, UNTAGGED_TOPIC } from './practiceTest';
+import type { SavedCourse, SlideSource } from '../types';
+import { listPracticeDocuments, resolvePracticeDocuments } from './practiceTest';
 
 function source(sourceId: string, fileName: string, text: string, status: SlideSource['status'] = 'ready'): SlideSource {
   return {
@@ -64,28 +64,5 @@ describe('resolvePracticeDocuments', () => {
     expect(docs).toEqual([
       { name: 'Midterm_2025.pdf', text: 'Subnetting\n192.168.1.0/24 has 254 hosts', date: new Date(3_000).toISOString() },
     ]);
-  });
-});
-
-describe('scorePracticeTest', () => {
-  const q = (id: number, topic: string, correctAnswerIndex: number): PracticeQuestion => ({
-    id,
-    question: `q${id}`,
-    options: ['a', 'b', 'c', 'd'],
-    correctAnswerIndex,
-    reasoning: 'r',
-    explanation: 'e',
-    sourceDocument: 'doc',
-    topic,
-  });
-
-  it('counts correct, answered and per-topic scores, weakest topic first', () => {
-    const score = scorePracticeTest([q(1, 'Subnetting', 0), q(2, 'Subnetting', 1), q(3, 'Routing', 2), q(4, '', 3)], [0, 1, 0, null]);
-    expect(score).toMatchObject({ correct: 2, answered: 3, total: 4, percent: 50 });
-    expect(score.byTopic.map((t) => t.topic)).toEqual(['Routing', UNTAGGED_TOPIC, 'Subnetting']);
-  });
-
-  it('handles an empty test', () => {
-    expect(scorePracticeTest([], [])).toMatchObject({ total: 0, percent: 0, byTopic: [] });
   });
 });

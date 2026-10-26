@@ -5,7 +5,6 @@ import { handleAnalyzeMaterial } from './analyzeMaterial';
 import { handleDiagnose } from './diagnose';
 import { handleSocraticEval } from './socraticEval';
 import { handleGenerateQuiz } from './generateQuiz';
-import { handleGeneratePracticeTest } from './practiceTest';
 import { handleAnalyzeExam, handleGenerateQuestions } from './generateQuestions';
 import { handleFinalDiagnosis } from './finalDiagnosis';
 import { handleGenerateSlides } from './generateSlides';
@@ -63,9 +62,6 @@ export function registerRoutes(app: Express): void {
 
   // 4. Generate Interactive Quiz Module (5-7 Questions Gradated)
   app.post('/api/generate-quiz', safe(quotaGuard), safe(handleGenerateQuiz));
-
-  // 4b. Practice test built from several uploaded exams/assignments (80/100/120% difficulty)
-  app.post('/api/practice-test/generate', safe(quotaGuard), safe(handleGeneratePracticeTest));
 
   // 4c. Exam-model question generator: real exam analysis, then verified questions + coverage report
   app.post('/api/generate-questions/analyze-exam', safe(quotaGuard), safe(handleAnalyzeExam));

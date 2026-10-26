@@ -12,6 +12,7 @@ import {
 } from '../prompts/analyzeMaterial';
 import { analyzeMaterialSchema } from '../schemas/analyzeMaterial';
 import { chunkText } from '../textChunker';
+import { MSG_OFFICE_UNSUPPORTED, docxToText, isDocx, isUnreadableOffice } from '../docText';
 
 const SYSTEM_PROMPT = buildSystemPrompt('01_ANALYZER.md', '02_STRUCTURER.md');
 
@@ -76,9 +77,18 @@ export const handleAnalyzeMaterial = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'لم يتم استلام أي نص أو مستند دراسي صالح للتحليل.' });
     }
 
+    if (isUnreadableOffice(fileName, mimeType)) {
+      return res.status(415).json({ error: MSG_OFFICE_UNSUPPORTED });
+    }
+
     let modules: RawModule[];
 
-    if (base64Data && mimeType) {
+    if (base64Data && isDocx(fileName, mimeType)) {
+      // Word files are converted to text and analyzed like any text upload.
+      const docx = await docxToText(base64Data);
+      if ('error' in docx) return res.status(422).json({ error: docx.error });
+      modules = await extractModulesFromText(docx.text.slice(0, MAX_TEXT_CHARS));
+    } else if (base64Data && mimeType) {
       modules = await extractModules([
         { inlineData: { mimeType, data: base64Data } },
         { text: EXTRACTION_INSTRUCTIONS },

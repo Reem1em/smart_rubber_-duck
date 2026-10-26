@@ -2,8 +2,9 @@ import type { Request, Response } from 'express';
 
 import { generateInteractive } from '../gemini';
 import { handleModelFailure } from '../routeErrors';
-import { buildSystemPrompt } from '../utils/loadAgent';
+import { classifyIntent, generateResponse } from '../chatIntent';
 import {
+  COURSE_CHAT_SYSTEM_INSTRUCTION,
   buildCourseChatPrompt,
   enforceCitations,
   sanitizeGrounding,
@@ -13,8 +14,6 @@ import { courseChatFallback } from '../fallbacks/courseChat';
 import { bearerToken, verifySession } from '../auth/session';
 import { getUserCourse } from '../auth/courseStore';
 import { ZERO_HALLUCINATION_MANDATE, resolveCourseScope } from '../courseScope';
-
-const SYSTEM_PROMPT = buildSystemPrompt('04_TUTOR.md');
 
 const normalizeHistory = (raw: unknown): CourseChatTurn[] =>
   Array.isArray(raw)
@@ -86,26 +85,31 @@ export const handleCourseChat = async (req: Request, res: Response) => {
     }
 
     const grounding = sanitizeGrounding(req.body);
+    const focusConcept = normalizeFocusConcept(req.body?.focusConcept);
+    const history = normalizeHistory(req.body?.history);
     const prompt = buildCourseChatPrompt({
       courseTitle: scoped.scope.courseTitle,
       conceptNames: scoped.scope.conceptNames,
-      focusConcept: normalizeFocusConcept(req.body?.focusConcept),
-      history: normalizeHistory(req.body?.history),
+      focusConcept,
+      history,
       message,
       ...grounding,
     });
 
-    const response = await generateInteractive({
-      contents: prompt,
-      config: {
-        systemInstruction: `${SYSTEM_PROMPT}\n\n${ZERO_HALLUCINATION_MANDATE}`,
-        temperature: 0.4,
-        maxOutputTokens: 1000,
+    // Chat-specific instruction only: the tutor agent file's Socratic modes made every turn a question.
+    const intent = classifyIntent(message, { history, hasFocusConcept: !!focusConcept });
+    const { reply: raw } = await generateResponse(intent, {
+      prompt,
+      history,
+      systemInstruction: `${COURSE_CHAT_SYSTEM_INSTRUCTION}\n\n${ZERO_HALLUCINATION_MANDATE}`,
+      callModel: async ({ contents, systemInstruction }) => {
+        const response = await generateInteractive({
+          contents,
+          config: { systemInstruction, temperature: 0.4, maxOutputTokens: 1000 },
+        });
+        return String(response.text || '');
       },
     });
-
-    const raw = String(response.text || '').trim();
-    if (!raw) throw new Error('Empty chat reply');
     const reply = enforceCitations(raw, grounding.excerpts);
 
     return res.json({ reply, degraded: false });

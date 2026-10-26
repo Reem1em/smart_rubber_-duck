@@ -1,8 +1,8 @@
 import type { Concept, MaterialInput, SlideSource } from '../../types';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
-/** Transcription of a long deck can take several model calls; this runs in the background. */
-const EXTRACT_TIMEOUT_MS = 300000;
+/** Slightly above the server watchdog (170s), so the client always receives the server's own answer. */
+const EXTRACT_TIMEOUT_MS = 180000;
 
 /**
  * Extracts the full slide text of one file for the course chat.

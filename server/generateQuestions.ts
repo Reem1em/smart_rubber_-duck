@@ -25,6 +25,8 @@ const QUOTE_MIN_WORDS = 3;
 export interface ExamDocument {
   name: string;
   text: string;
+  /** Id of the stored course file this exam text was extracted from; required for exam provenance. */
+  fileId?: string;
 }
 
 export interface TopicRef {
@@ -61,7 +63,12 @@ export interface GenerateQuestionsRequest {
   topics: TopicRequest[];
 }
 
-export type QuestionSource = 'exam' | 'course';
+/**
+ * - uploaded_exam: adapted from a question verified to exist in the stored, parsed exam file
+ * - mixed:         an exam question combined with material from the course files
+ * - generated:     built from the course files only, or exam origin could not be verified
+ */
+export type QuestionSource = 'uploaded_exam' | 'mixed' | 'generated';
 
 export interface GeneratedQuestion {
   id: number;
@@ -71,8 +78,9 @@ export interface GeneratedQuestion {
   correctAnswerIndex: number;
   reasoning: string;
   explanation: string;
-  /** 'exam' only when the question is adapted from a passage verified to exist in the uploaded exam. */
   source: QuestionSource;
+  /** Present exactly when `source` is not 'generated'. */
+  sourceFileId?: string;
   difficulty: PracticeDifficulty;
 }
 
@@ -95,7 +103,8 @@ function parseExam(raw: unknown): ExamDocument | null {
   const e = asRecord(raw);
   const text = typeof e.text === 'string' ? e.text.trim() : '';
   if (text.length < MIN_TEXT_CHARS) return null;
-  return { name: oneLine(e.name, MAX_NAME) || 'نموذج الاختبار', text: text.slice(0, MAX_EXAM_CHARS) };
+  const fileId = oneLine(e.fileId, MAX_NAME) || undefined;
+  return { name: oneLine(e.name, MAX_NAME) || 'نموذج الاختبار', text: text.slice(0, MAX_EXAM_CHARS), fileId };
 }
 
 function parseTopicRef(raw: unknown): TopicRef | null {
@@ -256,7 +265,8 @@ export function verifyExamAnalysis(raw: unknown, exam: ExamDocument, topics: Top
 /**
  * Keeps only well-formed questions whose `correct_answer` is exactly one of 4 distinct options,
  * that belong to a requested topic, aren't duplicates, and fit the topic's requested count.
- * A question claiming `source: 'exam'` keeps that label only when its excerpt is found in the exam.
+ * Exam provenance ('uploaded_exam' / 'mixed') is kept only when the exam carries a stored file id
+ * and the question's excerpt is found in the exam text; everything else is 'generated'.
  */
 export function verifyGeneratedQuestions(
   raw: unknown,
@@ -291,7 +301,13 @@ export function verifyGeneratedQuestions(
     if (!key || seen.has(key)) continue;
     seen.add(key);
 
-    const fromExam = str(q.source) === 'exam' && examIndex !== null && quotesText(str(q.exam_excerpt), examIndex);
+    const claimed = str(q.source);
+    const fromExam =
+      (claimed === 'exam' || claimed === 'mixed') &&
+      !!exam?.fileId &&
+      examIndex !== null &&
+      quotesText(str(q.exam_excerpt), examIndex);
+    const source: QuestionSource = fromExam ? (claimed === 'mixed' ? 'mixed' : 'uploaded_exam') : 'generated';
     cov.delivered++;
     if (fromExam) cov.fromExam++;
 
@@ -303,7 +319,8 @@ export function verifyGeneratedQuestions(
       correctAnswerIndex,
       reasoning,
       explanation: str(q.explanation) || reasoning,
-      source: fromExam ? 'exam' : 'course',
+      source,
+      ...(fromExam ? { sourceFileId: exam!.fileId } : {}),
       difficulty: topic.difficulty,
     });
   }

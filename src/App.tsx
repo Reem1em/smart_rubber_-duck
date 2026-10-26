@@ -12,18 +12,17 @@ import { QuizPanel } from './components/QuizPanel';
 import { FinalDiagnosisPanel } from './components/FinalDiagnosisPanel';
 import { CourseRoadmapPanel } from './components/CourseRoadmapPanel';
 import { CodeLabPanel } from './components/CodeLabPanel';
-import { PracticeTestView } from './components/practice/PracticeTestView';
 import { RateLimitModal } from './components/RateLimitModal';
 import { CourseChatDrawer } from './components/CourseChatDrawer';
 import { ThemeToggleCornerButton } from './components/ThemeToggleCornerButton';
 import { GenerateQuestionsPanel } from './components/GenerateQuestionsPanel';
+import { QUESTIONS_NAV, QUESTIONS_STEP, canonicalStep } from './navigation';
 import {
   RotateCcw,
   Map as MapIcon,
   MessageCircle,
   Code2,
   Library,
-  BookOpenCheck,
   Sun,
   Moon,
   Menu,
@@ -150,14 +149,6 @@ function AppContent() {
             active: false,
             onClick: () => openCourseChat(),
           },
-          {
-            key: 'practice',
-            label: 'اختبار تدريبي',
-            title: `اختبار تدريبي من مستندات ${activeCourse.title}`,
-            icon: BookOpenCheck,
-            active: step === 'practice',
-            onClick: () => setStep('practice'),
-          },
         ]
       : []),
     {
@@ -168,11 +159,12 @@ function AppContent() {
       onClick: () => setStep('codeLab'),
     },
     {
-      key: 'generateQuestions',
-      label: 'ولّد أسئلة',
+      key: QUESTIONS_NAV.key,
+      label: QUESTIONS_NAV.label,
+      title: QUESTIONS_NAV.title,
       icon: Sparkles,
-      active: step === 'generateQuestions',
-      onClick: () => setStep('generateQuestions'),
+      active: canonicalStep(step) === QUESTIONS_STEP,
+      onClick: () => setStep(QUESTIONS_STEP),
     },
   ];
 
@@ -424,8 +416,7 @@ function AppContent() {
         {step === 'roadmap' && <CourseRoadmapPanel />}
         {step === 'codeLab' && <CodeLabPanel />}
         {/* Keyed by course: switching courses starts a fresh setup instead of showing another course's test */}
-        {step === 'practice' && <PracticeTestView key={activeCourse?.id ?? 'none'} />}
-        {step === 'generateQuestions' && <GenerateQuestionsPanel />
+        {canonicalStep(step) === QUESTIONS_STEP && <GenerateQuestionsPanel />
         }
       </main>
 

@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAppState } from '../context/AppStateContext';
 import { analyzeMaterial } from '../services/ai';
 import { hashFile } from '../services/courseStore';
+import { SUPPORTED_UPLOAD_ACCEPT, SUPPORTED_UPLOAD_LABEL, classifyUpload, readUpload } from '../utils/uploadFile';
 import { formatBytes } from '../utils/formatBytes';
-import { CourseFile, MaterialInput, SavedCourse, SlideSource } from '../types';
+import { CourseFile, SavedCourse, SlideSource } from '../types';
 import {
   RefreshCw,
   Trash2,
@@ -38,19 +39,6 @@ function formatDate(ts: number): string {
     month: 'short',
     year: 'numeric',
   }).format(new Date(ts));
-}
-
-/** Reads a picked file into the MaterialInput shape the AI endpoints expect. */
-async function readMaterial(file: File): Promise<MaterialInput> {
-  const mimeType = file.type || 'application/octet-stream';
-  const isText = mimeType.startsWith('text/') || file.name.endsWith('.txt');
-  if (isText) {
-    const rawText = await file.text();
-    return { fileName: file.name, fileSize: file.size, fileType: file.type, rawText };
-  }
-  const buf = await file.arrayBuffer();
-  const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-  return { fileName: file.name, fileSize: file.size, fileType: file.type, base64Data: b64, mimeType };
 }
 
 /** Slide-text status chip for one source file (course-chat reference library). */
@@ -127,40 +115,46 @@ export const CourseFilesPanel: React.FC<Props> = ({ course }) => {
   const handleFile = useCallback(
     async (file: File) => {
       if (!file) return;
-      setUploadState({ phase: 'hashing' });
-
-      // 1. Fingerprint the file content.
-      const fileId = await hashFile(file);
-
-      // 2. Dedup: already in the repository? Concepts are never re-analyzed, but a chapter
-      //    whose slide text is missing / failed / partial gets its extraction (re)run.
-      if ((course.files ?? []).some((f) => f.id === fileId)) {
-        if (needsExtraction(sourceFor(fileId))) {
-          const material = await readMaterial(file);
-          void extractCourseSlides(course.id, fileId, material, conceptsOfChapter(fileId));
-          setUploadState({ phase: 'reextracting', fileName: file.name });
-        } else {
-          setUploadState({ phase: 'duplicate', fileName: file.name });
-        }
-        setTimeout(() => setUploadState({ phase: 'idle' }), 4000);
-        return;
-      }
-
-      // 3. Read into MaterialInput.
-      const material = await readMaterial(file);
-
-      setUploadState({ phase: 'analyzing', fileName: file.name, progress: 0 });
-
-      // 4. Fake progress ticks while AI call runs.
-      let tick = 0;
-      const timer = setInterval(() => {
-        tick = Math.min(tick + Math.random() * 12, 88);
-        setUploadState((s) =>
-          s.phase === 'analyzing' ? { ...s, progress: Math.round(tick) } : s
-        );
-      }, 600);
-
+      let timer: ReturnType<typeof setInterval> | undefined;
+      // Every step sits inside this try: a read/encode/network failure must end in an error
+      // state with its reason, never leave the drop-zone spinning.
       try {
+        setUploadState({ phase: 'hashing' });
+
+        // 0. Reject unsupported types before any work, with the reason.
+        classifyUpload(file);
+
+        // 1. Fingerprint the file content.
+        const fileId = await hashFile(file);
+
+        // 2. Dedup: already in the repository? Concepts are never re-analyzed, but a chapter
+        //    whose slide text is missing / failed / partial gets its extraction (re)run.
+        if ((course.files ?? []).some((f) => f.id === fileId)) {
+          if (needsExtraction(sourceFor(fileId))) {
+            const material = await readUpload(file);
+            void extractCourseSlides(course.id, fileId, material, conceptsOfChapter(fileId));
+            setUploadState({ phase: 'reextracting', fileName: file.name });
+          } else {
+            setUploadState({ phase: 'duplicate', fileName: file.name });
+          }
+          setTimeout(() => setUploadState({ phase: 'idle' }), 4000);
+          return;
+        }
+
+        // 3. Read into MaterialInput.
+        const material = await readUpload(file);
+
+        setUploadState({ phase: 'analyzing', fileName: file.name, progress: 0 });
+
+        // 4. Progress ticks while the AI call runs (capped below 100 until it really finishes).
+        let tick = 0;
+        timer = setInterval(() => {
+          tick = Math.min(tick + Math.random() * 12, 88);
+          setUploadState((s) =>
+            s.phase === 'analyzing' ? { ...s, progress: Math.round(tick) } : s
+          );
+        }, 600);
+
         const extracted = await analyzeMaterial(material);
         clearInterval(timer);
 
@@ -172,6 +166,7 @@ export const CourseFilesPanel: React.FC<Props> = ({ course }) => {
           uploadedAt: Date.now(),
           conceptsCount: extracted.length,
           status: 'processing',
+          kind: 'material',
         };
 
         const { duplicate } = await addChapterToCourse(course.id, fileRecord, extracted);
@@ -185,9 +180,9 @@ export const CourseFilesPanel: React.FC<Props> = ({ course }) => {
           void extractCourseSlides(course.id, fileId, material, extracted);
         }
       } catch (err: any) {
-        clearInterval(timer);
-        setUploadState({ phase: 'error', message: err?.message || 'تعذر استخراج المفاهيم.' });
-        setTimeout(() => setUploadState({ phase: 'idle' }), 6000);
+        if (timer) clearInterval(timer);
+        setUploadState({ phase: 'error', message: err?.message || `تعذرت معالجة الملف "${file.name}".` });
+        setTimeout(() => setUploadState({ phase: 'idle' }), 8000);
       }
     },
     [course.id, course.files, course.slideSources, course.concepts, addChapterToCourse, extractCourseSlides]
@@ -249,7 +244,7 @@ export const CourseFilesPanel: React.FC<Props> = ({ course }) => {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf,.doc,.docx,.txt,.ppt,.pptx"
+          accept={SUPPORTED_UPLOAD_ACCEPT}
           className="hidden"
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
         />
@@ -262,7 +257,7 @@ export const CourseFilesPanel: React.FC<Props> = ({ course }) => {
             <p className="text-sm font-bold text-slate-700">
               إضافة شابتر / ملف جديد للمادة
             </p>
-            <p className="text-xs text-slate-500">PDF • DOCX • TXT • PPTX — أو اسحب الملف هنا</p>
+            <p className="text-xs text-slate-500">{SUPPORTED_UPLOAD_LABEL} — أو اسحب الملف هنا</p>
           </div>
         )}
 
