@@ -6,7 +6,10 @@ import { buildSystemPrompt } from '../utils/loadAgent';
 import { buildExtractSlidesPrompt } from '../prompts/extractSlides';
 import { mergeSlides, parseTranscript } from '../slides/parseTranscript';
 import { MSG_OFFICE_UNSUPPORTED, docxToText, isDocx, isUnreadableOffice } from '../docText';
-import { buildSlideChunks, sectionPlainText, type ParsedSlide } from '../../src/services/slides/chunking';
+import { extractPdfText, meaningfulChars, textLayerIsUsable, type PdfFailure } from '../pdfText';
+import { formatDiagnostic } from '../extractionDiagnostic';
+import { buildSlideChunks, pageSlides, sectionPlainText, type ParsedSlide } from '../../src/services/slides/chunking';
+import type { ExtractionDiagnostic } from '../../src/types';
 
 const SYSTEM_PROMPT = buildSystemPrompt('01_ANALYZER.md');
 
@@ -24,9 +27,10 @@ const MSG_TRUNCATED = (n: number) =>
   `تم استخراج نص الشرائح حتى الشريحة ${n} فقط؛ بقية الملف لم تُستخرج بعد. أعد المعالجة لاحقاً لإكمالها.`;
 const MSG_UNREADABLE = (slides: number[]) =>
   `بعض الأجزاء غير مقروءة في الشرائح: ${slides.join('، ')}؛ لم يُخمَّن محتواها.`;
-const MSG_FAILED = 'تعذّر استخراج نص الشرائح الآن. يمكنك إعادة المعالجة لاحقاً.';
-const MSG_EMPTY =
-  'تمت قراءة الملف كاملاً ولم يُعثر فيه على نص قابل للقراءة. إذا كان صوراً ممسوحة بجودة منخفضة فارفع نسخة أوضح أو ملفاً نصياً.';
+/** Only reachable for a text source that sections to nothing; PDFs/images get a full diagnostic. */
+const MSG_EMPTY = 'لم يُعثر في الملف على نص قابل للقراءة.';
+const MSG_LAYER_ONLY = (pages: number, total: number | null) =>
+  `قُرئ النص المضمّن في ${pages} صفحة فقط من ${total ?? '؟'}؛ بقية الصفحات صور ولم ينجح التعرف الضوئي عليها الآن.`;
 const MSG_UNSUPPORTED_MIME = (mime: string) =>
   `صيغة الملف (${mime || 'غير معروفة'}) غير مدعومة لاستخراج النص. الصيغ المدعومة: PDF، صور PNG/JPG، ‎.docx، ‎.txt.`;
 
@@ -48,7 +52,8 @@ function finalizeSource(
   sourceId: string,
   fileName: string,
   slides: ParsedSlide[],
-  transcriptComplete: boolean
+  transcriptComplete: boolean,
+  note?: string
 ) {
   let total = 0;
   let kept = slides;
@@ -66,7 +71,7 @@ function finalizeSource(
   }
 
   const incompleteSlides = kept.filter((s) => s.incomplete).map((s) => s.slideIndex);
-  const errors: string[] = [];
+  const errors: string[] = note ? [note] : [];
   if (truncatedAfterSlide !== undefined) errors.push(MSG_TRUNCATED(truncatedAfterSlide));
   if (incompleteSlides.length) errors.push(MSG_UNREADABLE(incompleteSlides));
 
@@ -84,8 +89,15 @@ function finalizeSource(
   };
 }
 
-function failedSource(sourceId: string, fileName: string, error: string, status: 'failed' | 'unsupported' = 'failed') {
+function failedSource(
+  sourceId: string,
+  fileName: string,
+  error: string,
+  status: 'failed' | 'unsupported' = 'failed',
+  diagnostic?: ExtractionDiagnostic
+) {
   return {
+    ...(diagnostic ? { diagnostic } : {}),
     sourceId,
     fileName,
     status,
@@ -100,8 +112,9 @@ function failedSource(sourceId: string, fileName: string, error: string, status:
 /**
  * POST /api/extract-slides
  *
- * Extracts the full slide text of one uploaded file for the course chat. Text sources are
- * sectioned deterministically; PDFs and images are transcribed by Gemini in a truncation-safe
+ * Extracts the full text of one uploaded file (course chapters and exam models). Text sources are
+ * sectioned deterministically. PDFs: (1) their own text layer via pdf.js; (2) only if that is too
+ * sparse, OCR by Gemini in a truncation-safe
  * format with up to MAX_CALLS continuation calls. Never fabricates content: failures are
  * reported as `failed` / `partial`, not filled in.
  *
@@ -144,10 +157,61 @@ export const handleExtractSlides = async (req: Request, res: Response) => {
     return res.json(failedSource(sourceId, fileName, MSG_UNSUPPORTED_MIME(mimeType), 'unsupported'));
   }
 
+  const isPdf = mimeType === 'application/pdf';
+  const buffer = Buffer.from(base64Data, 'base64');
+  const diagnostic: ExtractionDiagnostic = {
+    fileName,
+    bytesRead: buffer.length,
+    pageCount: null,
+    pagesWithTextLayer: null,
+    extractors: [],
+  };
+
+  // Step 1 (PDF only): the PDF's own text layer — instant and exact for any typed/exported PDF.
+  let layerSlides: ParsedSlide[] = [];
+  let layerComplete = false;
+  let pdfFailure: PdfFailure | undefined;
+  if (isPdf) {
+    const layer = await extractPdfText(buffer);
+    if ('reason' in layer) {
+      pdfFailure = layer.reason;
+      diagnostic.pageCount = layer.pageCount ?? null;
+      diagnostic.extractors.push({
+        name: 'pdf_text_layer',
+        outcome: layer.reason === 'timeout' ? 'timeout' : 'failed',
+        detail: layer.detail,
+      });
+      // OCR cannot read what is empty, not a PDF, locked or structurally broken: report it now
+      // instead of spending the OCR budget. A slow text layer or an unavailable reader falls through to OCR.
+      if (layer.reason !== 'timeout' && layer.reason !== 'unavailable') {
+        return res.json(failedSource(sourceId, fileName, formatDiagnostic(diagnostic, layer.reason), 'failed', diagnostic));
+      }
+    } else {
+      diagnostic.pageCount = layer.pageCount;
+      diagnostic.pagesWithTextLayer = layer.pagesWithText;
+      layerSlides = pageSlides(layer.pages, concepts);
+      layerComplete = layer.pagesRead === layer.pageCount;
+      if (textLayerIsUsable(layer)) {
+        diagnostic.extractors.push({ name: 'pdf_text_layer', outcome: 'ok' });
+        diagnostic.extractors.push({ name: 'gemini_ocr', outcome: 'skipped' });
+        return res.json({ ...finalizeSource(sourceId, fileName, layerSlides, layerComplete), diagnostic });
+      }
+      diagnostic.extractors.push({
+        name: 'pdf_text_layer',
+        outcome: 'empty',
+        detail: `${layer.pagesWithText} من ${layer.pagesRead} صفحة فيها نص`,
+      });
+    }
+  }
+
+  // Step 2: OCR (Gemini vision) — scanned PDFs, images, and PDFs whose text layer is too sparse.
   const allowed = new Set(concepts.map((c) => c.id));
   const deadline = Date.now() + TOTAL_BUDGET_MS;
   let slides: ParsedSlide[] = [];
   let complete = false;
+  let ocrAnswered = false;
+  let lastRaw = '';
+  let ocrError: any = null;
 
   try {
     for (let call = 0; call < MAX_CALLS && !complete; call++) {
@@ -173,27 +237,89 @@ export const handleExtractSlides = async (req: Request, res: Response) => {
         Math.min(PER_CALL_TIMEOUT_MS, remaining)
       );
 
-      const parsed = parseTranscript(String(response?.text || ''), allowed);
+      ocrAnswered = true;
+      lastRaw = String(response?.text || '');
+      const parsed = parseTranscript(lastRaw, allowed);
       const before = slides.length;
       slides = mergeSlides(slides, parsed.slides);
       complete = parsed.complete;
       if (!complete && slides.length === before) break; // no progress — stop, report partial
     }
   } catch (err: any) {
-    if (slides.length === 0) {
-      if (isQuotaOrRateLimitError(err)) {
-        console.error(`[extract-slides] quota / rate limit: ${String(err?.message || err).slice(0, 300)}`);
-        return res.status(429).json({
-          error: 'تم استهلاك حصة الاستخدام المتاحة حالياً. أعد معالجة الشرائح لاحقاً.',
-          isRateLimit: true,
-        });
-      }
-      console.error(`[extract-slides] failed for ${fileName}: ${String(err?.message || err).slice(0, 300)}`);
-      return res.json(failedSource(sourceId, fileName, MSG_FAILED));
+    ocrError = err;
+    if (slides.length > 0) {
+      // A continuation failed after earlier slides arrived: keep them, report partial.
+      console.warn(`[extract-slides] continuation failed for ${fileName}; keeping ${slides.length} slide(s)`);
+    } else {
+      console.error(`[extract-slides] OCR failed for ${fileName}: ${String(err?.message || err).slice(0, 300)}`);
     }
-    // A continuation failed after earlier slides arrived: keep them, report partial.
-    console.warn(`[extract-slides] continuation failed for ${fileName}; keeping ${slides.length} slide(s)`);
   }
 
-  return res.json(finalizeSource(sourceId, fileName, slides, complete));
+  // The model answered with real text but ignored the slide format: keep the text, don't discard it.
+  if (slides.length === 0 && ocrAnswered) {
+    const loose = looseTranscript(lastRaw, concepts);
+    if (loose.length) {
+      slides = loose;
+      complete = true;
+    }
+  }
+
+  if (slides.length > 0) {
+    diagnostic.extractors.push({ name: 'gemini_ocr', outcome: 'ok' });
+    return res.json({ ...finalizeSource(sourceId, fileName, slides, complete), diagnostic });
+  }
+
+  diagnostic.extractors.push({
+    name: 'gemini_ocr',
+    ...(ocrError
+      ? { outcome: /timed out/i.test(String(ocrError?.message)) ? 'timeout' : 'failed', detail: ocrErrorDetail(ocrError) }
+      : ocrAnswered
+        ? { outcome: 'empty' }
+        : { outcome: 'timeout', detail: 'لم يبقَ وقت كافٍ للمحاولة' }),
+  });
+
+  // OCR got nothing, but the sparse text layer did have some pages: serve those, marked partial.
+  if (layerSlides.length > 0) {
+    return res.json({
+      ...finalizeSource(sourceId, fileName, layerSlides, layerComplete, MSG_LAYER_ONLY(layerSlides.length, diagnostic.pageCount)),
+      diagnostic,
+    });
+  }
+
+  if (ocrError && isQuotaOrRateLimitError(ocrError)) {
+    console.error(`[extract-slides] quota / rate limit: ${String(ocrError?.message || ocrError).slice(0, 300)}`);
+    return res.status(429).json({
+      error: 'تم استهلاك حصة الاستخدام المتاحة حالياً. أعد معالجة الشرائح لاحقاً.',
+      isRateLimit: true,
+      diagnostic,
+    });
+  }
+
+  // Step 3: both failed — say exactly what was tried, never a bare "no readable text".
+  return res.json(failedSource(sourceId, fileName, formatDiagnostic(diagnostic, pdfFailure), 'failed', diagnostic));
+};
+
+/** Refusals/apologies are not document text. */
+const REFUSAL = /\b(cannot|can't|unable|sorry)\b|لا أستطيع|لا يمكنني|تعذر علي|عذراً/i;
+
+/**
+ * Text the OCR model returned outside the slide format. Accepted only when it is substantial
+ * and not a refusal; it is then sectioned like any plain-text upload.
+ */
+export function looseTranscript(raw: string, concepts: ConceptRef[]): ParsedSlide[] {
+  const text = raw
+    .replace(/^```[a-z]*\n?/i, '')
+    .replace(/```\s*$/, '')
+    .replace(/^===.*===\s*$/gm, '')
+    .replace(/^(KEYWORDS|CONCEPTS|UNREADABLE):.*$/gm, '')
+    .replace(/^(TEXT|VISUAL):\s*/gm, '')
+    .trim();
+  if (meaningfulChars(text) < 80 || REFUSAL.test(text.slice(0, 200))) return [];
+  return sectionPlainText(text.slice(0, MAX_TEXT_INPUT_CHARS), concepts);
+}
+
+const ocrErrorDetail = (err: any): string => {
+  const status = err?.status ?? err?.code;
+  if (/timed out/i.test(String(err?.message))) return 'لم يرد النموذج في الوقت المحدد';
+  return status ? `خطأ من خدمة النموذج ${status}` : 'خطأ في الاتصال بخدمة النموذج';
 };

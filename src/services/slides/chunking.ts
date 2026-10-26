@@ -143,17 +143,29 @@ export function sectionPlainText(
 
   return sections
     .filter((s) => s.heading.trim() || s.body.trim())
-    .map((s, i) => {
-      const body = s.body.trim();
-      const heading = s.heading || body.split('\n')[0].slice(0, 80);
-      const haystack = `${heading}\n${body}`;
-      const keywords = Array.from(new Set(contentTokens(heading).map((t) => t.primary))).slice(0, 12);
-      return {
-        slideIndex: i + 1,
-        heading,
-        text: body,
-        keywords,
-        conceptIds: concepts.filter((c) => mentionsConcept(haystack, c.name)).map((c) => c.id),
-      };
-    });
+    .map((s, i) => textSlide(i + 1, s.heading, s.body, concepts));
+}
+
+function textSlide(
+  slideIndex: number,
+  rawHeading: string,
+  rawBody: string,
+  concepts: Array<{ id: string; name: string }>
+): ParsedSlide {
+  const body = rawBody.trim();
+  const heading = rawHeading || body.split('\n')[0].slice(0, 80);
+  const haystack = `${heading}\n${body}`;
+  const keywords = Array.from(new Set(contentTokens(heading).map((t) => t.primary))).slice(0, 12);
+  return {
+    slideIndex,
+    heading,
+    text: body,
+    keywords,
+    conceptIds: concepts.filter((c) => mentionsConcept(haystack, c.name)).map((c) => c.id),
+  };
+}
+
+/** One slide per PDF page that has text; slideIndex is the real page number. */
+export function pageSlides(pages: string[], concepts: Array<{ id: string; name: string }>): ParsedSlide[] {
+  return pages.flatMap((text, i) => (text.trim() ? [textSlide(i + 1, '', text, concepts)] : []));
 }

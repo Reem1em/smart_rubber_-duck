@@ -127,6 +127,23 @@ export interface SlideSource {
   extractedAt: number;
   /** Student-safe Arabic reason for partial / failed / unsupported. */
   error?: string;
+  /** What extraction actually tried; present for PDF/image sources. */
+  diagnostic?: ExtractionDiagnostic;
+}
+
+export type ExtractorName = 'pdf_text_layer' | 'gemini_ocr';
+export type ExtractorOutcome = 'ok' | 'empty' | 'failed' | 'timeout' | 'skipped';
+
+/** Per-file extraction report: enough to tell a broken file from a broken extractor. */
+export interface ExtractionDiagnostic {
+  fileName: string;
+  bytesRead: number;
+  /** null when the file could not be opened as a PDF (or is an image). */
+  pageCount: number | null;
+  /** Pages whose own text layer had readable text; null when not a PDF or not opened. */
+  pagesWithTextLayer: number | null;
+  /** Extractors in the order they ran. */
+  extractors: Array<{ name: ExtractorName; outcome: ExtractorOutcome; detail?: string }>;
 }
 
 /** Signed-in student profile returned by POST /api/auth/google. */
